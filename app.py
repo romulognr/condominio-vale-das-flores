@@ -61,11 +61,6 @@ def init_supabase() -> Client:
 
 supabase = init_supabase()
 
-def cpf_to_email(cpf: str) -> str:
-    # A atualização aqui permite o uso da palavra "administrador" removendo apenas pontos e traços.
-    clean_login = cpf.replace(".", "").replace("-", "").strip().lower()
-    return f"{clean_login}@condo.com"
-
 def fmt_brl(value: float) -> str:
     return f"R$ {value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
@@ -76,31 +71,30 @@ def section_header(icon: str, title: str):
     st.markdown(f'<div class="section-header"><span style="font-size:18px">{icon}</span><h3>{title}</h3><div class="section-divider"></div></div>', unsafe_allow_html=True)
 
 # ─────────────────────────────────────────────
-#  AUTH (COM PROTEÇÃO NONETYPE)
+#  AUTH (DIRETO NA TABELA PERFIS)
 # ─────────────────────────────────────────────
 if "user" not in st.session_state: st.session_state.user = None
 if "perfil" not in st.session_state: st.session_state.perfil = None
 
-def fazer_login(cpf: str, password: str):
+def fazer_login(login_input: str, password_input: str):
     try:
-        email = cpf_to_email(cpf)
-        auth  = supabase.auth.sign_in_with_password({"email": email, "password": password})
-        st.session_state.user = auth.user
+        clean_login = login_input.strip().lower()
+        res = supabase.table("perfis").select("*").eq("login", clean_login).execute()
         
-        perfil = supabase.table("perfis").select("id, nome, funcao, bloco_unidade, link_boleto, link_comprovante").eq("id", auth.user.id).single().execute()
-        
-        if perfil.data:
-            st.session_state.perfil = perfil.data
-            st.rerun()
+        if res.data and len(res.data) > 0:
+            perfil_encontrado = res.data[0]
+            if perfil_encontrado.get("senha") == password_input:
+                st.session_state.user = {"id": perfil_encontrado["id"]}
+                st.session_state.perfil = perfil_encontrado
+                st.rerun()
+            else:
+                st.error("Senha incorreta.")
         else:
-            st.session_state.user = None
-            st.error("Erro: O perfil não está vinculado a este utilizador na tabela 'perfis'.")
-    except Exception:
-        st.error("Utilizador ou senha incorretos. Verifique as credenciais.")
+            st.error("Utilizador não encontrado.")
+    except Exception as e:
+        st.error(f"Erro ao efetuar login: {e}")
 
 def fazer_logout():
-    try: supabase.auth.sign_out()
-    except: pass
     st.session_state.user = None
     st.session_state.perfil = None
     st.rerun()
@@ -109,11 +103,11 @@ if st.session_state.user is None or st.session_state.perfil is None:
     _, col, _ = st.columns([1, 1.4, 1])
     with col:
         st.markdown('<div style="text-align:center; padding: 48px 0 24px;"><div style="font-size:52px; margin-bottom:10px">🏡</div><div style="font-size:24px; font-weight:700; color:#0F1B2D;">Vale das Flores</div><div style="font-size:14px; color:#64748B; margin-top:4px;">Portal de Transparência do Condomínio</div></div>', unsafe_allow_html=True)
-        cpf_input   = st.text_input("Login", placeholder="O seu CPF ou nome de administrador")
-        senha_input = st.text_input("Senha", type="password", placeholder="A sua senha")
+        login_input = st.text_input("Login", placeholder="Digite 'administrador' ou seu CPF")
+        senha_input = st.text_input("Senha", type="password", placeholder="Sua senha")
         st.markdown('<div class="login-btn">', unsafe_allow_html=True)
         if st.button("Entrar no Painel", use_container_width=True):
-            if cpf_input and senha_input: fazer_login(cpf_input, senha_input)
+            if login_input and senha_input: fazer_login(login_input, senha_input)
             else: st.warning("Preencha Login e Senha.")
         st.markdown('</div><br>', unsafe_allow_html=True)
         st.caption("💻 Sistema desenvolvido por **Rômulo Henrique**")
@@ -144,18 +138,16 @@ def carregar_financas():
     return df
 
 def calcular_kpis(df: pd.DataFrame, casa_logada: str, mes_sel: int, ano_sel: int):
-    # Entradas e saídas gerais de todo o histórico do condomínio
     entradas = df[df["tipo"] == "entrada"]["valor"].sum() if not df.empty else 0
     saidas   = df[df["tipo"] == "saida"]["valor"].sum() if not df.empty else 0
     reserva  = df[df["categoria"] == "Fundo de Reserva"]["valor"].sum() if not df.empty else 0
     doacoes  = df[df["categoria"] == "Doações"]["valor"].sum() if not df.empty else 0
     
-    # Dados específicos do mês selecionado
     df_mes    = df[(df["data"].dt.month == mes_sel) & (df["data"].dt.year == ano_sel)] if not df.empty else pd.DataFrame()
     taxas_mes = df_mes[(df_mes["categoria"] == "Taxa Condominial") & (df_mes["tipo"] == "entrada")] if not df_mes.empty else pd.DataFrame()
     
-    pagaram     = min(taxas_mes["casa_pagadora"].nunique() if not taxas_mes.empty and "casa_pagadora" in taxas_mes.columns else 0, TOTAL_CASAS)
-    arrec_mes   = taxas_mes["valor"].sum() if not taxas_mes.empty else 0
+    pagaram   = min(taxas_mes["casa_pagadora"].nunique() if not taxas_mes.empty and "casa_pagadora" in taxas_mes.columns else 0, TOTAL_CASAS)
+    arrec_mes = taxas_mes["valor"].sum() if not taxas_mes.empty else 0
     
     return {
         "caixa": entradas - saidas, "entradas": entradas, "saidas": saidas, "reserva": reserva, "doacoes": doacoes,
@@ -170,20 +162,14 @@ def calcular_kpis(df: pd.DataFrame, casa_logada: str, mes_sel: int, ano_sel: int
 if escolha == "📊 Dashboard":
     st.markdown('<div class="page-title">Painel Financeiro</div><div class="page-subtitle">Residencial Vale das Flores</div><br>', unsafe_allow_html=True)
     df = carregar_financas()
-    
     if df.empty: 
         st.info("Nenhuma movimentação registada ainda.")
         st.stop()
 
-    # --- NOVO: LÓGICA DE SELEÇÃO DE MÊS/ANO ---
     hoje = datetime.date.today()
     periodo_atual = f"{hoje.month:02d}/{hoje.year}"
-    
-    # Extrai os meses/anos únicos que existem na base de dados
     periodos = df['data'].dt.to_period('M').unique().tolist()
     periodos_str = sorted([f"{p.month:02d}/{p.year}" for p in periodos], reverse=True)
-    
-    # Garante que o mês atual está sempre na lista
     if periodo_atual not in periodos_str:
         periodos_str.insert(0, periodo_atual)
     
@@ -194,7 +180,6 @@ if escolha == "📊 Dashboard":
     mes_str, ano_str = periodo_selecionado.split("/")
     mes_sel, ano_sel = int(mes_str), int(ano_str)
     
-    # Calcula os KPIs com base no mês selecionado
     kpi = calcular_kpis(df, perfil["bloco_unidade"], mes_sel, ano_sel)
 
     if funcao == "condomino":
@@ -215,7 +200,6 @@ if escolha == "📊 Dashboard":
                 st.caption("O síndico ainda não anexou o comprovativo deste mês.")
         st.markdown("---")
 
-    # Resumo Geral Histórico
     section_header("💰", "Resumo do Caixa (Histórico Completo)")
     c1, c2, c3, c4 = st.columns(4)
     c1.markdown(metric_card("Saldo", fmt_brl(kpi["caixa"]), "", "green"), unsafe_allow_html=True)
@@ -223,7 +207,6 @@ if escolha == "📊 Dashboard":
     c3.markdown(metric_card("Saídas", fmt_brl(kpi["saidas"]), "", "red"), unsafe_allow_html=True)
     c4.markdown(metric_card("Reserva", fmt_brl(kpi["reserva"]), "", "purple"), unsafe_allow_html=True)
 
-    # Adimplência do Mês Selecionado
     section_header("📉", f"Situação de Adimplência — {periodo_selecionado}")
     m1, m2, m3, m4 = st.columns(4)
     m1.markdown(metric_card("Adimplentes", f"{kpi['pagaram']}/{TOTAL_CASAS}", "", "green"), unsafe_allow_html=True)
@@ -232,7 +215,6 @@ if escolha == "📊 Dashboard":
     m4.markdown(metric_card("Pró-Labore (10%)", fmt_brl(kpi["pro_labore"]), "Mês atual", "purple"), unsafe_allow_html=True)
 
     section_header("📋", f"Movimentações do Mês ({periodo_selecionado})")
-    # Filtra a tabela de exibição apenas para o mês selecionado
     df_exib = df[(df["data"].dt.month == mes_sel) & (df["data"].dt.year == ano_sel)][["data", "descricao", "categoria", "tipo", "valor"]].copy()
     
     if not df_exib.empty:
@@ -250,7 +232,6 @@ if escolha == "📊 Dashboard":
 # ─────────────────────────────────────────────
 elif escolha == "➕ Lançar Movimentação":
     st.markdown('<div class="page-title">Lançar Movimentação</div>', unsafe_allow_html=True)
-    
     aba_manual, aba_planilha = st.tabs(["✍️ Lançamento Manual", "📥 Importar Planilha"])
     
     with aba_manual:
@@ -266,21 +247,18 @@ elif escolha == "➕ Lançar Movimentação":
             if st.form_submit_button("✅ Guardar"):
                 if desc and val_f > 0:
                     casa_salvar = casa_f if cat_f == "Taxa Condominial" and casa_f != "Não se aplica" else None
-                    supabase.table("financas").insert({"descricao": desc, "tipo": tipo_f, "categoria": cat_f, "valor": val_f, "data": str(data_f), "casa_pagadora": casa_salvar, "criado_por": st.session_state.user.id}).execute()
+                    supabase.table("financas").insert({"descricao": desc, "tipo": tipo_f, "categoria": cat_f, "valor": val_f, "data": str(data_f), "casa_pagadora": casa_salvar, "criado_por": str(st.session_state.user["id"])}).execute()
                     carregar_financas.clear(); st.success("Registado!"); st.rerun()
 
     with aba_planilha:
         st.info("💡 A sua planilha Excel ou CSV deve conter exatamente estas 5 colunas: **Data, Descricao, Categoria, Tipo, Valor**")
         arquivo = st.file_uploader("Selecione o ficheiro Excel (.xlsx) ou CSV", type=["csv", "xlsx"])
-        
         if arquivo:
             try:
                 if arquivo.name.endswith('.csv'): df_import = pd.read_csv(arquivo)
                 else: df_import = pd.read_excel(arquivo)
-                
                 st.write("Pré-visualização dos dados a importar:")
                 st.dataframe(df_import.head())
-                
                 if st.button("🚀 Confirmar e Importar Tudo"):
                     registos = []
                     for _, row in df_import.iterrows():
@@ -290,13 +268,13 @@ elif escolha == "➕ Lançar Movimentação":
                             "categoria": str(row['Categoria']),
                             "tipo": str(row['Tipo']).lower(),
                             "valor": float(row['Valor']),
-                            "criado_por": st.session_state.user.id
+                            "criado_por": str(st.session_state.user["id"])
                         })
                     supabase.table("financas").insert(registos).execute()
                     carregar_financas.clear()
                     st.success(f"{len(registos)} registos importados com sucesso!")
             except Exception as e:
-                st.error(f"Erro na importação. Verifique se os nomes das colunas estão corretos. Detalhe: {e}")
+                st.error(f"Erro na importação: {e}")
 
 # ─────────────────────────────────────────────
 #  TELA: BOLETOS E COMPROVANTES
@@ -313,7 +291,7 @@ elif escolha == "📄 Boletos e Comprovantes":
             casa_sel = st.selectbox("Selecione o Morador / Casa", list(opcoes.keys()))
             col_b1, col_b2 = st.columns(2)
             link_bol = col_b1.text_input("Link do Boleto (Deixe em branco para não alterar)")
-            link_cmp = col_b2.text_input("Link do Comprovativo de Pagamento (Google Drive, etc)")
+            link_cmp = col_b2.text_input("Link do Comprovativo de Pagamento")
             
             if st.form_submit_button("💾 Guardar Links"):
                 updates = {}
@@ -339,21 +317,29 @@ elif escolha == "👥 Cadastrar Morador":
     st.markdown('<div class="page-title">Cadastrar Morador</div>', unsafe_allow_html=True)
     with st.form("form_cadastro", clear_on_submit=True):
         col_c1, col_c2 = st.columns(2)
-        nome_m = col_c1.text_input("Nome completo")
-        cpf_m  = col_c1.text_input("CPF (Servirá de Login e Senha)")
+        nome_m  = col_c1.text_input("Nome completo")
+        cpf_m   = col_c1.text_input("CPF (Servirá de Login e Senha)")
         bloco_m = col_c2.selectbox("Casa", [f"Casa {i}" for i in range(1, TOTAL_CASAS + 1)])
         funcao_m = col_c2.selectbox("Papel", ["condomino", "sindico"])
+        
         if st.form_submit_button("👤 Cadastrar"):
             if nome_m and cpf_m:
                 try:
-                    auth_r = supabase.auth.sign_up({"email": cpf_to_email(cpf_m), "password": cpf_m})
-                    if auth_r.user:
-                        supabase.table("perfis").insert({"id": auth_r.user.id, "nome": nome_m, "bloco_unidade": bloco_m, "funcao": funcao_m}).execute()
-                        st.success("Cadastrado! Acesso: CPF no login e senha.")
-                except Exception as e: st.error(e)
-            else: st.warning("Preencha todos os campos.")
+                    clean_cpf = ''.join(filter(str.isdigit, cpf_m))
+                    supabase.table("perfis").insert({
+                        "id": str(datetime.datetime.now().timestamp()),
+                        "nome": nome_m,
+                        "bloco_unidade": bloco_m,
+                        "funcao": funcao_m,
+                        "login": clean_cpf,
+                        "senha": clean_cpf
+                    }).execute()
+                    st.success(f"✅ {nome_m} cadastrado com sucesso! Login e Senha são o CPF.")
+                except Exception as e: 
+                    st.error(f"Erro ao cadastrar: {e}")
+            else: 
+                st.warning("Preencha todos os campos.")
 
 elif escolha == "📹 Câmeras Ao Vivo":
     st.markdown('<div class="page-title">Câmeras Ao Vivo</div>', unsafe_allow_html=True)
-    # A funcionalidade do Youtube deve ser injetada de volta caso você for usar a lógica anterior
     st.info("Módulo de câmeras ativo. Adicione links via painel do síndico.")
