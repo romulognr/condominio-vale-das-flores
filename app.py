@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from supabase import create_client, Client
 import datetime
+import uuid
 
 # ─────────────────────────────────────────────
 #  CONFIGURAÇÃO DA PÁGINA
@@ -326,8 +327,11 @@ elif escolha == "👥 Cadastrar Morador":
             if nome_m and cpf_m:
                 try:
                     clean_cpf = ''.join(filter(str.isdigit, cpf_m))
+                    # Gera um UUID válido para evitar conflito com a coluna UUID do Supabase
+                    novo_id = str(uuid.uuid4())
+                    
                     supabase.table("perfis").insert({
-                        "id": str(datetime.datetime.now().timestamp()),
+                        "id": novo_id,
                         "nome": nome_m,
                         "bloco_unidade": bloco_m,
                         "funcao": funcao_m,
