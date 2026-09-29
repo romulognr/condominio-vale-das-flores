@@ -3,11 +3,21 @@ import pandas as pd
 from supabase import create_client, Client
 import datetime
 import uuid
+import os
+import base64
 
 # ─────────────────────────────────────────────
-#  CONFIGURAÇÃO DA PÁGINA
+#  CONFIGURAÇÃO DA PÁGINA E LOGÓTIPO
 # ─────────────────────────────────────────────
 st.set_page_config(page_title="Vale das Flores · Gestão", page_icon="🏡", layout="wide", initial_sidebar_state="expanded")
+
+def get_base64_image(image_path):
+    if os.path.exists(image_path):
+        with open(image_path, "rb") as img_file:
+            return base64.b64encode(img_file.read()).decode()
+    return None
+
+logo_base64 = get_base64_image("icon.png")
 
 # ─────────────────────────────────────────────
 #  ESTILOS GLOBAIS
@@ -103,7 +113,12 @@ def fazer_logout():
 if st.session_state.user is None or st.session_state.perfil is None:
     _, col, _ = st.columns([1, 1.4, 1])
     with col:
-        st.markdown('<div style="text-align:center; padding: 48px 0 24px;"><div style="font-size:52px; margin-bottom:10px">🏡</div><div style="font-size:24px; font-weight:700; color:#0F1B2D;">Vale das Flores</div><div style="font-size:14px; color:#64748B; margin-top:4px;">Portal de Transparência do Condomínio</div></div>', unsafe_allow_html=True)
+        # Exibe o logo se existir na pasta, senão mostra o emoji 🏡
+        if logo_base64:
+            st.markdown(f'<div style="text-align:center; padding: 20px 0;"><img src="data:image/png;base64,{logo_base64}" style="max-width:200px;"></div>', unsafe_allow_html=True)
+        else:
+            st.markdown('<div style="text-align:center; padding: 48px 0 24px;"><div style="font-size:52px; margin-bottom:10px">🏡</div><div style="font-size:24px; font-weight:700; color:#0F1B2D;">Vale das Flores</div><div style="font-size:14px; color:#64748B; margin-top:4px;">Portal de Transparência do Condomínio</div></div>', unsafe_allow_html=True)
+        
         login_input = st.text_input("Login", placeholder="Digite 'administrador' ou seu CPF")
         senha_input = st.text_input("Senha", type="password", placeholder="Sua senha")
         st.markdown('<div class="login-btn">', unsafe_allow_html=True)
@@ -139,110 +154,139 @@ def carregar_financas():
     return df
 
 def calcular_kpis(df: pd.DataFrame, casa_logada: str, mes_sel: int, ano_sel: int):
+    # Calcula as entradas e saidas totais
     entradas = df[df["tipo"] == "entrada"]["valor"].sum() if not df.empty else 0
     saidas   = df[df["tipo"] == "saida"]["valor"].sum() if not df.empty else 0
     reserva  = df[df["categoria"] == "Fundo de Reserva"]["valor"].sum() if not df.empty else 0
     doacoes  = df[df["categoria"] == "Doações"]["valor"].sum() if not df.empty else 0
     
-    df_mes    = df[(df["data"].dt.month == mes_sel) & (df["data"].dt.year == ano_sel)] if not df.empty else pd.DataFrame()
-    taxas_mes = df_mes[(df_mes["categoria"] == "Taxa Condominial") & (df_mes["tipo"] == "entrada")] if not df_mes.empty else pd.DataFrame()
+    # Filtra as movimentações para o mês específico
+    df_mes = df[(df["data"].dt.month == mes_sel) & (df["data"].dt.year == ano_sel)] if not df.empty else pd.DataFrame()
     
+    # Adimplência e Arrecadação
+    taxas_mes = df_mes[(df_mes["categoria"] == "Taxa Condominial") & (df_mes["tipo"] == "entrada")] if not df_mes.empty else pd.DataFrame()
     pagaram   = min(taxas_mes["casa_pagadora"].nunique() if not taxas_mes.empty and "casa_pagadora" in taxas_mes.columns else 0, TOTAL_CASAS)
     arrec_mes = taxas_mes["valor"].sum() if not taxas_mes.empty else 0
     
+    # O saldo global é sempre o Total Entradas - Total Saídas
+    saldo_global = entradas - saidas
+    
+    # Verifica se há registos de cobrança gerados neste mês (se o síndico já lançou taxas ou não)
+    mes_iniciado = not df_mes.empty
+    usuario_pago = casa_logada in taxas_mes["casa_pagadora"].tolist() if not taxas_mes.empty and "casa_pagadora" in taxas_mes.columns else False
+    
     return {
-        "caixa": entradas - saidas, "entradas": entradas, "saidas": saidas, "reserva": reserva, "doacoes": doacoes,
+        "caixa": saldo_global, "entradas": entradas, "saidas": saidas, "reserva": reserva, "doacoes": doacoes,
         "pagaram": pagaram, "inadimp": TOTAL_CASAS - pagaram, "pct_inadimp": ((TOTAL_CASAS - pagaram) / TOTAL_CASAS) * 100,
         "arrec_mes": arrec_mes, "pro_labore": arrec_mes * 0.10, "mes": mes_sel, "ano": ano_sel,
-        "usuario_pago": casa_logada in taxas_mes["casa_pagadora"].tolist() if not taxas_mes.empty and "casa_pagadora" in taxas_mes.columns else False
+        "usuario_pago": usuario_pago, "mes_iniciado": mes_iniciado
     }
 
 # ─────────────────────────────────────────────
 #  TELA: DASHBOARD
 # ─────────────────────────────────────────────
 if escolha == "📊 Dashboard":
-    st.markdown('<div class="page-title">Painel Financeiro</div><div class="page-subtitle">Residencial Vale das Flores</div><br>', unsafe_allow_html=True)
+    if logo_base64:
+        st.markdown(f'<div style="margin-bottom:10px;"><img src="data:image/png;base64,{logo_base64}" style="max-width:150px;"></div>', unsafe_allow_html=True)
+    st.markdown('<div class="page-title">Painel Financeiro</div><div class="page-subtitle">Transparência e Resultados</div><br>', unsafe_allow_html=True)
+    
     df = carregar_financas()
-    if df.empty: 
-        st.info("Nenhuma movimentação registada ainda.")
-        st.stop()
-
     hoje = datetime.date.today()
     periodo_atual = f"{hoje.month:02d}/{hoje.year}"
-    periodos = df['data'].dt.to_period('M').unique().tolist()
-    periodos_str = sorted([f"{p.month:02d}/{p.year}" for p in periodos], reverse=True)
-    if periodo_atual not in periodos_str:
-        periodos_str.insert(0, periodo_atual)
+    
+    # Garante que temos um dropdown dinâmico com histórico e próximos meses
+    periodos_str = []
+    if not df.empty:
+        periodos = df['data'].dt.to_period('M').unique().tolist()
+        periodos_str = sorted([f"{p.month:02d}/{p.year}" for p in periodos], reverse=True)
+    
+    # Adiciona 2 meses futuros e o atual caso não existam nos dados
+    for extra_month in range(0, 3):
+        m = (hoje.month + extra_month - 1) % 12 + 1
+        y = hoje.year + (hoje.month + extra_month - 1) // 12
+        p_str = f"{m:02d}/{y}"
+        if p_str not in periodos_str:
+            periodos_str.append(p_str)
+            
+    periodos_str = sorted(periodos_str, reverse=True)
     
     col_sel1, col_sel2 = st.columns([1, 3])
     with col_sel1:
-        periodo_selecionado = st.selectbox("📅 Selecione o Mês de Referência:", periodos_str)
+        periodo_selecionado = st.selectbox("📅 Selecione o Mês de Referência:", periodos_str, index=periodos_str.index(periodo_atual) if periodo_atual in periodos_str else 0)
     
     mes_str, ano_str = periodo_selecionado.split("/")
     mes_sel, ano_sel = int(mes_str), int(ano_str)
     
-    kpi = calcular_kpis(df, perfil["bloco_unidade"], mes_sel, ano_sel)
+    # Processa os KPIs se existirem dados
+    if not df.empty:
+        kpi = calcular_kpis(df, perfil["bloco_unidade"], mes_sel, ano_sel)
 
-    if funcao == "condomino":
-        st.markdown(f"### 📌 A Minha Unidade (Referência: {periodo_selecionado})")
-        col_c1, col_c2 = st.columns(2)
-        with col_c1:
-            if not kpi["usuario_pago"]:
-                st.error(f"⚠️ A taxa de {periodo_selecionado} da **{perfil['bloco_unidade']}** está em aberto.")
-                if perfil.get("link_boleto"):
-                    st.markdown(f'<a href="{perfil["link_boleto"]}" target="_blank"><button style="background:#EF4444;color:white;border:none;padding:10px 20px;border-radius:8px;font-weight:bold;width:100%;cursor:pointer;">📥 Descarregar Boleto</button></a>', unsafe_allow_html=True)
-            else:
-                st.success(f"✅ Pagamento de {periodo_selecionado} regularizado.")
-        with col_c2:
-            st.info("Comprovativo de Pagamento (Anexado pelo Síndico)")
-            if perfil.get("link_comprovante"):
-                st.markdown(f'<a href="{perfil["link_comprovante"]}" target="_blank"><button style="background:#10B981;color:white;border:none;padding:10px 20px;border-radius:8px;font-weight:bold;width:100%;cursor:pointer;">👁️ Ver Comprovativo</button></a>', unsafe_allow_html=True)
-            else:
-                st.caption("O síndico ainda não anexou o comprovativo deste mês.")
-        st.markdown("---")
+        if funcao == "condomino":
+            st.markdown(f"### 📌 A Minha Unidade (Referência: {periodo_selecionado})")
+            col_c1, col_c2 = st.columns(2)
+            with col_c1:
+                # Regra de Meses Futuros
+                if not kpi["mes_iniciado"]:
+                    st.info(f"⏳ O balanço para o mês de **{periodo_selecionado}** ainda não foi fechado ou iniciado pelo síndico.")
+                elif not kpi["usuario_pago"]:
+                    st.error(f"⚠️ A taxa de {periodo_selecionado} da **{perfil['bloco_unidade']}** está em aberto.")
+                    if perfil.get("link_boleto"):
+                        st.markdown(f'<a href="{perfil["link_boleto"]}" target="_blank"><button style="background:#EF4444;color:white;border:none;padding:10px 20px;border-radius:8px;font-weight:bold;width:100%;cursor:pointer;">📥 Descarregar Boleto</button></a>', unsafe_allow_html=True)
+                else:
+                    st.success(f"✅ Pagamento de {periodo_selecionado} regularizado.")
+            with col_c2:
+                st.info("Comprovativo de Pagamento (Anexado pelo Síndico)")
+                if perfil.get("link_comprovante"):
+                    st.markdown(f'<a href="{perfil["link_comprovante"]}" target="_blank"><button style="background:#10B981;color:white;border:none;padding:10px 20px;border-radius:8px;font-weight:bold;width:100%;cursor:pointer;">👁️ Ver Comprovativo</button></a>', unsafe_allow_html=True)
+                else:
+                    st.caption("O síndico ainda não anexou o comprovativo deste mês.")
+            st.markdown("---")
 
-    section_header("💰", "Resumo do Caixa (Histórico Completo)")
-    c1, c2, c3, c4 = st.columns(4)
-    c1.markdown(metric_card("Saldo", fmt_brl(kpi["caixa"]), "", "green"), unsafe_allow_html=True)
-    c2.markdown(metric_card("Entradas", fmt_brl(kpi["entradas"]), "", "blue"), unsafe_allow_html=True)
-    c3.markdown(metric_card("Saídas", fmt_brl(kpi["saidas"]), "", "red"), unsafe_allow_html=True)
-    c4.markdown(metric_card("Reserva", fmt_brl(kpi["reserva"]), "", "purple"), unsafe_allow_html=True)
+        section_header("💰", "Resumo do Caixa (Histórico Completo)")
+        c1, c2, c3, c4 = st.columns(4)
+        c1.markdown(metric_card("Saldo Global", fmt_brl(kpi["caixa"]), "Total em conta", "green"), unsafe_allow_html=True)
+        c2.markdown(metric_card("Entradas G.", fmt_brl(kpi["entradas"]), "Acumulado", "blue"), unsafe_allow_html=True)
+        c3.markdown(metric_card("Saídas G.", fmt_brl(kpi["saidas"]), "Acumulado", "red"), unsafe_allow_html=True)
+        c4.markdown(metric_card("Reserva", fmt_brl(kpi["reserva"]), "Fundos", "purple"), unsafe_allow_html=True)
 
-    section_header("📉", f"Situação de Adimplência — {periodo_selecionado}")
-    m1, m2, m3, m4 = st.columns(4)
-    m1.markdown(metric_card("Adimplentes", f"{kpi['pagaram']}/{TOTAL_CASAS}", "", "green"), unsafe_allow_html=True)
-    m2.markdown(metric_card("Inadimplentes", f"{kpi['inadimp']} casas", f"{kpi['pct_inadimp']:.1f}%", "red"), unsafe_allow_html=True)
-    m3.markdown(metric_card("Doações", fmt_brl(kpi["doacoes"]), "Mês atual", "amber"), unsafe_allow_html=True)
-    m4.markdown(metric_card("Pró-Labore (10%)", fmt_brl(kpi["pro_labore"]), "Mês atual", "purple"), unsafe_allow_html=True)
+        section_header("📉", f"Situação do Mês ({periodo_selecionado})")
+        m1, m2, m3, m4 = st.columns(4)
+        m1.markdown(metric_card("Adimplentes", f"{kpi['pagaram']}/{TOTAL_CASAS}", "", "green"), unsafe_allow_html=True)
+        m2.markdown(metric_card("Inadimplentes", f"{kpi['inadimp']} casas", f"{kpi['pct_inadimp']:.1f}%", "red"), unsafe_allow_html=True)
+        m3.markdown(metric_card("Arrecadado", fmt_brl(kpi["arrec_mes"]), "Neste mês", "blue"), unsafe_allow_html=True)
+        m4.markdown(metric_card("Pró-Labore (10%)", fmt_brl(kpi["pro_labore"]), "Ref. Arrecadação", "purple"), unsafe_allow_html=True)
 
-    section_header("📋", f"Movimentações do Mês ({periodo_selecionado})")
-    df_exib = df[(df["data"].dt.month == mes_sel) & (df["data"].dt.year == ano_sel)][["data", "descricao", "categoria", "tipo", "valor"]].copy()
-    
-    if not df_exib.empty:
-        df_exib["data"] = df_exib["data"].dt.strftime("%d/%m/%Y")
-        df_exib["valor"] = df_exib["valor"].map(fmt_brl)
-        st.dataframe(df_exib, use_container_width=True, hide_index=True)
+        section_header("📋", f"Movimentações Detalhadas ({periodo_selecionado})")
+        df_exib = df[(df["data"].dt.month == mes_sel) & (df["data"].dt.year == ano_sel)][["data", "descricao", "categoria", "tipo", "valor"]].copy()
         
-        csv = df_exib.to_csv(index=False).encode('utf-8')
-        st.download_button(label=f"📄 Descarregar Relatório de {periodo_selecionado} (CSV)", data=csv, file_name=f"relatorio_{mes_sel}_{ano_sel}.csv", mime="text/csv")
+        if not df_exib.empty:
+            df_exib["data"] = df_exib["data"].dt.strftime("%d/%m/%Y")
+            df_exib["valor"] = df_exib["valor"].map(fmt_brl)
+            st.dataframe(df_exib, use_container_width=True, hide_index=True)
+            
+            csv = df_exib.to_csv(index=False).encode('utf-8')
+            st.download_button(label=f"📄 Descarregar Relatório de {periodo_selecionado} (CSV)", data=csv, file_name=f"relatorio_{mes_sel}_{ano_sel}.csv", mime="text/csv")
+        else:
+            st.info("Nenhuma movimentação registada para o mês selecionado.")
     else:
-        st.info("Nenhuma movimentação registada para o mês selecionado.")
+        st.info("O sistema financeiro ainda não tem movimentações. Importe a primeira planilha ou faça um lançamento manual.")
 
 # ─────────────────────────────────────────────
 #  TELA: LANÇAR MOVIMENTAÇÃO (COM IMPORTAÇÃO)
 # ─────────────────────────────────────────────
 elif escolha == "➕ Lançar Movimentação":
     st.markdown('<div class="page-title">Lançar Movimentação</div>', unsafe_allow_html=True)
-    aba_manual, aba_planilha = st.tabs(["✍️ Lançamento Manual", "📥 Importar Planilha"])
+    aba_manual, aba_planilha = st.tabs(["✍️ Lançamento Manual / Ajuste", "📥 Importar Planilha"])
     
     with aba_manual:
+        st.info("💡 **Dica:** Para atualizar manualmente o valor que está no banco, utilize a categoria **'Ajuste de Saldo (Manual)'**. Escolha 'Entrada' para adicionar fundos ou 'Saída' para retirar.")
         with st.form("form_lancamento", clear_on_submit=True):
             col_f1, col_f2 = st.columns(2)
-            desc   = col_f1.text_input("Descrição")
+            desc   = col_f1.text_input("Descrição (Ex: Ajuste de saldo inicial, ou Compra material)")
             val_f  = col_f1.number_input("Valor (R$)", min_value=0.01)
             data_f = col_f1.date_input("Data")
             tipo_f = col_f2.selectbox("Tipo", ["entrada", "saida"])
-            cat_f  = col_f2.selectbox("Categoria", ["Taxa Condominial", "Doações", "Manutenção", "Água/Luz", "Fundo de Reserva", "Pró-Labore Síndico", "Outros"])
+            cat_f  = col_f2.selectbox("Categoria", ["Taxa Condominial", "Ajuste de Saldo (Manual)", "Manutenção", "Água/Luz", "Fundo de Reserva", "Pró-Labore Síndico", "Doações", "Outros"])
             casa_f = col_f2.selectbox("Casa pagadora (Se Taxa Condominial)", ["Não se aplica"] + [f"Casa {i}" for i in range(1, TOTAL_CASAS + 1)])
             
             if st.form_submit_button("✅ Guardar"):
@@ -365,7 +409,6 @@ elif escolha == "📹 Câmeras Ao Vivo":
                         
                         if video_id:
                             embed_url = f"https://www.youtube.com/embed/{video_id}?autoplay=1&mute=1"
-                            # Gerando UUID para a câmera para não dar conflito na BD
                             novo_id_cam = str(uuid.uuid4())
                             
                             supabase.table("cameras").insert({
