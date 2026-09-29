@@ -56,6 +56,8 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 .page-title { font-size: 26px; font-weight: 700; color: #0F1B2D; margin-bottom: 4px; }
 .page-subtitle { font-size: 14px; color: #64748B; margin-bottom: 0; }
 .login-btn button { background: #1E3A5F !important; color: white !important; border: none !important; border-radius: 10px !important; height: 46px !important; font-weight: 600 !important; font-size: 15px !important; width: 100%; }
+.relatorio-box { background: white; padding: 24px; border-radius: 12px; border: 1px solid #E2E8F0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); margin-bottom: 20px;}
+.relatorio-box h4 { color: #1E3A5F; font-weight: 700; margin-top:0;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -113,7 +115,6 @@ def fazer_logout():
 if st.session_state.user is None or st.session_state.perfil is None:
     _, col, _ = st.columns([1, 1.4, 1])
     with col:
-        # Exibe o logo se existir na pasta, senão mostra o emoji 🏡
         if logo_base64:
             st.markdown(f'<div style="text-align:center; padding: 20px 0;"><img src="data:image/png;base64,{logo_base64}" style="max-width:200px;"></div>', unsafe_allow_html=True)
         else:
@@ -136,7 +137,7 @@ perfil = st.session_state.perfil
 funcao = perfil["funcao"]
 st.sidebar.markdown(f'<div style="padding: 12px 0 20px;"><div style="font-size:36px; margin-bottom:8px">👤</div><div style="font-size:16px; font-weight:700; color:#F1F5F9">{perfil["nome"]}</div><div style="font-size:12px; color:#94A3B8; margin:2px 0 8px">{perfil["bloco_unidade"]}</div><span class="badge {"badge-sindico" if funcao == "sindico" else "badge-condomino"}">{funcao}</span></div><hr style="border-color:rgba(255,255,255,0.1); margin-bottom:20px">', unsafe_allow_html=True)
 
-menu_options = ["📊 Dashboard", "📹 Câmeras Ao Vivo"]
+menu_options = ["📊 Dashboard", "📑 Relatórios Oficiais", "📹 Câmeras Ao Vivo"]
 if funcao == "sindico":
     menu_options += ["➕ Lançar Movimentação", "👥 Cadastrar Morador", "📄 Boletos e Comprovantes"]
 
@@ -154,24 +155,18 @@ def carregar_financas():
     return df
 
 def calcular_kpis(df: pd.DataFrame, casa_logada: str, mes_sel: int, ano_sel: int):
-    # Calcula as entradas e saidas totais
     entradas = df[df["tipo"] == "entrada"]["valor"].sum() if not df.empty else 0
     saidas   = df[df["tipo"] == "saida"]["valor"].sum() if not df.empty else 0
     reserva  = df[df["categoria"] == "Fundo de Reserva"]["valor"].sum() if not df.empty else 0
     doacoes  = df[df["categoria"] == "Doações"]["valor"].sum() if not df.empty else 0
     
-    # Filtra as movimentações para o mês específico
     df_mes = df[(df["data"].dt.month == mes_sel) & (df["data"].dt.year == ano_sel)] if not df.empty else pd.DataFrame()
     
-    # Adimplência e Arrecadação
     taxas_mes = df_mes[(df_mes["categoria"] == "Taxa Condominial") & (df_mes["tipo"] == "entrada")] if not df_mes.empty else pd.DataFrame()
     pagaram   = min(taxas_mes["casa_pagadora"].nunique() if not taxas_mes.empty and "casa_pagadora" in taxas_mes.columns else 0, TOTAL_CASAS)
     arrec_mes = taxas_mes["valor"].sum() if not taxas_mes.empty else 0
     
-    # O saldo global é sempre o Total Entradas - Total Saídas
     saldo_global = entradas - saidas
-    
-    # Verifica se há registos de cobrança gerados neste mês (se o síndico já lançou taxas ou não)
     mes_iniciado = not df_mes.empty
     usuario_pago = casa_logada in taxas_mes["casa_pagadora"].tolist() if not taxas_mes.empty and "casa_pagadora" in taxas_mes.columns else False
     
@@ -194,13 +189,11 @@ if escolha == "📊 Dashboard":
     hoje = datetime.date.today()
     periodo_atual = f"{hoje.month:02d}/{hoje.year}"
     
-    # Garante que temos um dropdown dinâmico com histórico e próximos meses
     periodos_str = []
     if not df.empty:
         periodos = df['data'].dt.to_period('M').unique().tolist()
         periodos_str = sorted([f"{p.month:02d}/{p.year}" for p in periodos], reverse=True)
     
-    # Adiciona 2 meses futuros e o atual caso não existam nos dados
     for extra_month in range(0, 3):
         m = (hoje.month + extra_month - 1) % 12 + 1
         y = hoje.year + (hoje.month + extra_month - 1) // 12
@@ -217,7 +210,6 @@ if escolha == "📊 Dashboard":
     mes_str, ano_str = periodo_selecionado.split("/")
     mes_sel, ano_sel = int(mes_str), int(ano_str)
     
-    # Processa os KPIs se existirem dados
     if not df.empty:
         kpi = calcular_kpis(df, perfil["bloco_unidade"], mes_sel, ano_sel)
 
@@ -225,7 +217,6 @@ if escolha == "📊 Dashboard":
             st.markdown(f"### 📌 A Minha Unidade (Referência: {periodo_selecionado})")
             col_c1, col_c2 = st.columns(2)
             with col_c1:
-                # Regra de Meses Futuros
                 if not kpi["mes_iniciado"]:
                     st.info(f"⏳ O balanço para o mês de **{periodo_selecionado}** ainda não foi fechado ou iniciado pelo síndico.")
                 elif not kpi["usuario_pago"]:
@@ -270,6 +261,65 @@ if escolha == "📊 Dashboard":
             st.info("Nenhuma movimentação registada para o mês selecionado.")
     else:
         st.info("O sistema financeiro ainda não tem movimentações. Importe a primeira planilha ou faça um lançamento manual.")
+
+# ─────────────────────────────────────────────
+#  TELA: RELATÓRIOS OFICIAIS (PDFs Extraídos)
+# ─────────────────────────────────────────────
+elif escolha == "📑 Relatórios Oficiais":
+    st.markdown('<div class="page-title">Relatórios da Gestão</div>', unsafe_allow_html=True)
+    st.markdown('<div class="page-subtitle">Comunicados, resumos e transparência emitidos pelo Síndico.</div><br>', unsafe_allow_html=True)
+
+    # Relatório 2: Agosto/Setembro
+    with st.expander("📄 Relatório Financeiro - Agosto e Parcial de Setembro/2026", expanded=True):
+        st.markdown("""
+        <div class="relatorio-box">
+        <h4>Assunto: Relatório Financeiro Mensal</h4>
+        <p>Para garantirmos a transparência total da nossa gestão e mantermos todos informados sobre a saúde financeira do Residencial Vale das Flores, envio o detalhamento das movimentações da nossa conta bancária referente ao mês de Agosto, junto com uma atualização do cenário de Setembro.</p>
+        
+        **Saldo Final de Julho:** R$ 692,97<br><br>
+        
+        **AGOSTO/2026**
+        * **Entradas (Arrecadação de Taxas):** Recebimentos das cotas regulares e do lote unificado.
+        * **Saídas (Contas de Consumo e Internet):** R$ 327,07 (Equatorial Energia: R$ 227,08 | Chapanet: R$ 99,99).
+        * **Saídas (Prestadores de Serviço):** R$ 4.082,46 (Jean Pierre: R$ 3.150,00 | Manoel Renato: R$ 632,46 - piscineiro | Tiago Ribeiro: R$ 300,00 - manutenção do frigobar).
+        * **Saídas (Materiais e Insumos):** R$ 177,11 (Mateus Supermercados, SM Pontes, KL Sousa, Raimunda Moraes). Destinado à compra de produtos de limpeza.
+        * *Nota da Gestão:* Excepcionalmente neste mês de agosto, não houve a retirada da remuneração do síndico em prol do caixa do condomínio.
+        
+        **Saldo Final de Agosto:** R$ 2.908,63<br><br>
+        
+        **QUADRO ATUALIZADO (Fechamento até 15/09/2026)**<br>
+        Para garantir visibilidade total do nosso cenário atual de setembro, compartilho também a nossa posição bancária e de arrecadação neste momento:
+        * **Saldo Atual em Conta:** R$ 1.192,29
+        * **Inadimplência Acumulada:** R$ 1.750,00 (Valor referente a 7 cotas condominiais em atraso, referentes aos meses de Agosto e Setembro).
+        * *Nota:* Já estamos em contato de forma individual com as unidades pendentes para facilitar a regularização, pois dependemos dessa arrecadação para mantermos os serviços e o caixa em dia.
+        
+        <br><i>Todos os comprovantes fiscais, notas e recibos correspondentes a essas despesas estão rigorosamente arquivados comigo. Sigo à total disposição para conversarmos.</i><br>
+        <b>Um abraço, Rômulo Henrique da Silva Lima<br>Síndico - Condomínio Vale das Flores</b>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # Relatório 1: Julho
+    with st.expander("📄 Relatório Financeiro - Julho/2026", expanded=False):
+        st.markdown("""
+        <div class="relatorio-box">
+        <h4>Assunto: Relatório Financeiro Mensal</h4>
+        <p>Para garantirmos a transparência total da nossa gestão e mantermos todos informados sobre a saúde financeira do Residencial Vale das Flores, envio o detalhamento das movimentações da nossa conta bancária referente ao mês de Julho.</p>
+        
+        **Saldo Final de Junho:** R$ 2.110,47<br><br>
+        
+        **JULHO/2026**
+        * **Entradas (Arrecadação de Taxas):** Recebimentos das cotas regulares e do lote unificado.
+        * **Saídas (Contas de Consumo):** R$ 270,41 (Equatorial Energia).
+        * **Saídas (Prestadores de Serviço):** R$ 5.180,00 (Jean Pierre: R$ 3.150,00 | Fernando Coelho: R$ 1.300,00 - eletricista / bomba | Luiz Mendes: R$ 300,00 | Manoel Renato: R$ 250,00 | Geraldo da Conceição: R$ 180,00).
+        * **Saídas (Materiais e Insumos):** R$ 1.999,99 (FV Material de Construção, RG Sousa). Destinado à manutenção da bomba de água/poço.
+        * *Nota da Gestão:* Excepcionalmente neste mês de Julho, não houve a retirada da remuneração do síndico em prol do caixa do condomínio.
+        
+        **Saldo Final de Julho:** R$ 692,97<br><br>
+        
+        <br><i>Todos os comprovantes fiscais, notas e recibos correspondentes a essas despesas estão rigorosamente arquivados comigo. Sigo à total disposição para conversarmos.</i><br>
+        <b>Um abraço, Rômulo Henrique da Silva Lima<br>Síndico - Condomínio Vale das Flores</b>
+        </div>
+        """, unsafe_allow_html=True)
 
 # ─────────────────────────────────────────────
 #  TELA: LANÇAR MOVIMENTAÇÃO (COM IMPORTAÇÃO)
