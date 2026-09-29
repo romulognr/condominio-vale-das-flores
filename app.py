@@ -265,33 +265,56 @@ if escolha == "📊 Dashboard":
 # ─────────────────────────────────────────────
 #  TELA: RELATÓRIOS OFICIAIS (PDFs Extraídos)
 # ─────────────────────────────────────────────
+#  TELA: RELATÓRIOS OFICIAIS (PDFs Extraídos)
+# ─────────────────────────────────────────────
 elif escolha == "📑 Relatórios Oficiais":
     st.markdown('<div class="page-title">Relatórios da Gestão</div>', unsafe_allow_html=True)
     st.markdown('<div class="page-subtitle">Comunicados, resumos e transparência emitidos pelo Síndico.</div><br>', unsafe_allow_html=True)
 
-    # Relatório 2: Agosto/Setembro
-    with st.expander("📄 Relatório Financeiro - Agosto e Parcial de Setembro/2026", expanded=True):
+    # Relatório 3: Setembro
+    with st.expander("📄 Relatório Financeiro - Setembro/2026", expanded=True):
         st.markdown("""
         <div class="relatorio-box">
         <h4>Assunto: Relatório Financeiro Mensal</h4>
-        <p>Para garantirmos a transparência total da nossa gestão e mantermos todos informados sobre a saúde financeira do Residencial Vale das Flores, envio o detalhamento das movimentações da nossa conta bancária referente ao mês de Agosto, junto com uma atualização do cenário de Setembro.</p>
+        <p>Para garantirmos a transparência total da nossa gestão e mantermos todos informados sobre a saúde financeira do Residencial Vale das Flores, envio o detalhamento das movimentações da nossa conta bancária referente ao mês de Setembro.</p>
+        
+        **Saldo Final de Agosto:** R$ 2.908,63<br><br>
+        
+        **SETEMBRO/2026**
+- **Entradas (Arrecadação de Taxas):** Recebimentos das cotas regulares e taxa unificada.
+- **Saídas (Contas de Consumo):** R$ 472,18 (Equatorial Energia: faturas de R$ 85,47 e R$ 386,71).
+- **Saídas (Prestadores de Serviço):** R$ 4.375,00 (Jean Pierre: R$ 3.000,00 | Fernando Coelho [Encanador]: R$ 775,00 | El Shaddai Construções: R$ 600,00).
+- **Saídas (Materiais e Insumos):** R$ 477,12 (Mateus Supermercados, Uni Cores, R G de Sousa, Rato Ferragista, Oliveira Construções).
+- **Saídas (Gestão e Administrativo):** R$ 892,04 (Síndico: R$ 650,00 | PIX Marketplace: R$ 192,04 | Louriane de Assis: R$ 50,00).
+        
+        **Saldo Atual em Conta:** R$ 1.197,79[cite: 7]<br><br>
+        
+        **QUADRO DE INADIMPLÊNCIA ATUALIZADO**<br>
+- **Inadimplência Acumulada:** R$ 2.000,00 (Valor referente a 8 cotas condominiais em atraso, referentes aos meses de Julho[cite: 8] e Agosto[cite: 9]).
+- *Nota da Gestão:* Já estamos em contato de forma individual com as unidades pendentes para facilitar a regularização, pois dependemos dessa arrecadação para mantermos os serviços, manutenção das bombas e o caixa em dia.
+        
+        <br><i>Todos os comprovantes fiscais, notas e recibos correspondentes a essas despesas estão rigorosamente arquivados comigo. Sigo à total disposição para conversarmos.</i><br>
+        <b>Um abraço, Rômulo Henrique da Silva Lima<br>Síndico - Condomínio Vale das Flores</b>
+        </div>
+        """, unsafe_allow_html=True)
+
+    # Relatório 2: Agosto
+    with st.expander("📄 Relatório Financeiro - Agosto/2026", expanded=False):
+        st.markdown("""
+        <div class="relatorio-box">
+        <h4>Assunto: Relatório Financeiro Mensal</h4>
+        <p>Para garantirmos a transparência total da nossa gestão e mantermos todos informados sobre a saúde financeira do Residencial Vale das Flores, envio o detalhamento das movimentações da nossa conta bancária referente ao mês de Agosto.</p>
         
         **Saldo Final de Julho:** R$ 692,97<br><br>
         
         **AGOSTO/2026**
-        * **Entradas (Arrecadação de Taxas):** Recebimentos das cotas regulares e do lote unificado.
-        * **Saídas (Contas de Consumo e Internet):** R$ 327,07 (Equatorial Energia: R$ 227,08 | Chapanet: R$ 99,99).
-        * **Saídas (Prestadores de Serviço):** R$ 4.082,46 (Jean Pierre: R$ 3.150,00 | Manoel Renato: R$ 632,46 - piscineiro | Tiago Ribeiro: R$ 300,00 - manutenção do frigobar).
-        * **Saídas (Materiais e Insumos):** R$ 177,11 (Mateus Supermercados, SM Pontes, KL Sousa, Raimunda Moraes). Destinado à compra de produtos de limpeza.
-        * *Nota da Gestão:* Excepcionalmente neste mês de agosto, não houve a retirada da remuneração do síndico em prol do caixa do condomínio.
+- **Entradas (Arrecadação de Taxas):** Recebimentos das cotas regulares e do lote unificado.
+- **Saídas (Contas de Consumo e Internet):** R$ 327,07 (Equatorial Energia: R$ 227,08 | Chapanet: R$ 99,99).
+- **Saídas (Prestadores de Serviço):** R$ 4.082,46 (Jean Pierre: R$ 3.150,00 | Manoel Renato: R$ 632,46 - piscineiro | Tiago Ribeiro: R$ 300,00 - manutenção do frigobar).
+- **Saídas (Materiais e Insumos):** R$ 177,11 (Mateus Supermercados, SM Pontes, KL Sousa, Raimunda Moraes). Destinado à compra de produtos de limpeza.
+- *Nota da Gestão:* Excepcionalmente neste mês de agosto, não houve a retirada da remuneração do síndico em prol do caixa do condomínio.
         
         **Saldo Final de Agosto:** R$ 2.908,63<br><br>
-        
-        **QUADRO ATUALIZADO (Fechamento até 15/09/2026)**<br>
-        Para garantir visibilidade total do nosso cenário atual de setembro, compartilho também a nossa posição bancária e de arrecadação neste momento:
-        * **Saldo Atual em Conta:** R$ 1.192,29
-        * **Inadimplência Acumulada:** R$ 1.750,00 (Valor referente a 7 cotas condominiais em atraso, referentes aos meses de Agosto e Setembro).
-        * *Nota:* Já estamos em contato de forma individual com as unidades pendentes para facilitar a regularização, pois dependemos dessa arrecadação para mantermos os serviços e o caixa em dia.
         
         <br><i>Todos os comprovantes fiscais, notas e recibos correspondentes a essas despesas estão rigorosamente arquivados comigo. Sigo à total disposição para conversarmos.</i><br>
         <b>Um abraço, Rômulo Henrique da Silva Lima<br>Síndico - Condomínio Vale das Flores</b>
@@ -308,11 +331,11 @@ elif escolha == "📑 Relatórios Oficiais":
         **Saldo Final de Junho:** R$ 2.110,47<br><br>
         
         **JULHO/2026**
-        * **Entradas (Arrecadação de Taxas):** Recebimentos das cotas regulares e do lote unificado.
-        * **Saídas (Contas de Consumo):** R$ 270,41 (Equatorial Energia).
-        * **Saídas (Prestadores de Serviço):** R$ 5.180,00 (Jean Pierre: R$ 3.150,00 | Fernando Coelho: R$ 1.300,00 - eletricista / bomba | Luiz Mendes: R$ 300,00 | Manoel Renato: R$ 250,00 | Geraldo da Conceição: R$ 180,00).
-        * **Saídas (Materiais e Insumos):** R$ 1.999,99 (FV Material de Construção, RG Sousa). Destinado à manutenção da bomba de água/poço.
-        * *Nota da Gestão:* Excepcionalmente neste mês de Julho, não houve a retirada da remuneração do síndico em prol do caixa do condomínio.
+- **Entradas (Arrecadação de Taxas):** Recebimentos das cotas regulares e do lote unificado.
+- **Saídas (Contas de Consumo):** R$ 270,41 (Equatorial Energia).
+- **Saídas (Prestadores de Serviço):** R$ 5.180,00 (Jean Pierre: R$ 3.150,00 | Fernando Coelho: R$ 1.300,00 - eletricista / bomba | Luiz Mendes: R$ 300,00 | Manoel Renato: R$ 250,00 | Geraldo da Conceição: R$ 180,00).
+- **Saídas (Materiais e Insumos):** R$ 1.999,99 (FV Material de Construção, RG Sousa). Destinado à manutenção da bomba de água/poço.
+- *Nota da Gestão:* Excepcionalmente neste mês de Julho, não houve a retirada da remuneração do síndico em prol do caixa do condomínio.
         
         **Saldo Final de Julho:** R$ 692,97<br><br>
         
