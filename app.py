@@ -327,7 +327,6 @@ elif escolha == "👥 Cadastrar Morador":
             if nome_m and cpf_m:
                 try:
                     clean_cpf = ''.join(filter(str.isdigit, cpf_m))
-                    # Gera um UUID válido para evitar conflito com a coluna UUID do Supabase
                     novo_id = str(uuid.uuid4())
                     
                     supabase.table("perfis").insert({
@@ -351,7 +350,6 @@ elif escolha == "📹 Câmeras Ao Vivo":
     st.markdown('<div class="page-title">Câmeras Ao Vivo</div>', unsafe_allow_html=True)
     st.markdown('<div class="page-subtitle">Monitorização em tempo real (YouTube)</div><br>', unsafe_allow_html=True)
     
-    # 1. Área do Síndico para Adicionar Câmeras
     if funcao == "sindico":
         with st.expander("⚙️ Gerir Câmeras (Área do Síndico)", expanded=False):
             with st.form("form_camera", clear_on_submit=True):
@@ -361,14 +359,17 @@ elif escolha == "📹 Câmeras Ao Vivo":
                 
                 if st.form_submit_button("➕ Adicionar Câmera"):
                     if nome_cam and link_cam:
-                        # Extrai o ID do video para embed
                         video_id = ""
                         if "v=" in link_cam: video_id = link_cam.split("v=")[1][:11]
                         elif "youtu.be/" in link_cam: video_id = link_cam.split("youtu.be/")[1][:11]
                         
                         if video_id:
                             embed_url = f"https://www.youtube.com/embed/{video_id}?autoplay=1&mute=1"
+                            # Gerando UUID para a câmera para não dar conflito na BD
+                            novo_id_cam = str(uuid.uuid4())
+                            
                             supabase.table("cameras").insert({
+                                "id": novo_id_cam,
                                 "nome_camera": nome_cam, 
                                 "link_stream": embed_url
                             }).execute()
@@ -379,7 +380,6 @@ elif escolha == "📹 Câmeras Ao Vivo":
                     else:
                         st.warning("Preencha o nome e o link.")
             
-            # Botão para limpar todas as câmeras
             if st.button("🗑️ Remover todas as câmeras", type="primary"):
                 res_cam = supabase.table("cameras").select("id").execute()
                 for c in res_cam.data:
@@ -387,16 +387,13 @@ elif escolha == "📹 Câmeras Ao Vivo":
                 st.success("Câmeras removidas!")
                 st.rerun()
 
-    # 2. Exibir as Câmeras (Para todos os moradores)
     res_cameras = supabase.table("cameras").select("*").order("criado_em").execute()
     
     if res_cameras.data:
-        # Cria uma grelha de 2 colunas para exibir as câmeras
         cols = st.columns(2)
         for i, cam in enumerate(res_cameras.data):
             with cols[i % 2]:
                 st.markdown(f"**{cam['nome_camera']}**")
-                # Iframe do YouTube
                 st.markdown(f'''
                     <iframe width="100%" height="300" src="{cam['link_stream']}" 
                     title="Câmera {cam['nome_camera']}" frameborder="0" 
