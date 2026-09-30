@@ -243,7 +243,7 @@ if escolha == "📊 Dashboard":
 
                 st.markdown(f'<div style="background:#FEF2F2; border: 1px solid #EF4444; border-radius: 8px; padding: 24px; margin-bottom: 24px;">'
                             f'<h4 style="color:#B91C1C; margin-top:0;">🚨 ATENÇÃO: Pendências Financeiras</h4>'
-                            f'<p style="color:#991B1B; margin-bottom:15px;">Identificámos pendências referentes a: <b>{meses_atrasados}</b>. Por favor, regularize a situação para evitarmos a suspensão de serviços.</p>'
+                            f'<p style="color:#991B1B; margin-bottom:15px;">Identificamos pendências referentes a: <b>{meses_atrasados}</b>. Por favor, regularize a situação para evitarmos a suspensão de serviços.</p>'
                             f'<div>{botoes_html}</div>'
                             f'</div>', unsafe_allow_html=True)
 
