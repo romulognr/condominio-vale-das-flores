@@ -163,9 +163,16 @@ def calcular_kpis(df: pd.DataFrame, casa_logada: str, mes_sel: int, ano_sel: int
     doacoes  = df[df["categoria"] == "Doações"]["valor"].sum() if not df.empty else 0
     
     df_mes = df[(df["data"].dt.month == mes_sel) & (df["data"].dt.year == ano_sel)] if not df.empty else pd.DataFrame()
-    
     taxas_mes = df_mes[(df_mes["categoria"] == "Taxa Condominial") & (df_mes["tipo"] == "entrada")] if not df_mes.empty else pd.DataFrame()
-    pagaram   = min(taxas_mes["casa_pagadora"].nunique() if not taxas_mes.empty and "casa_pagadora" in taxas_mes.columns else 0, TOTAL_CASAS)
+    
+    # 🌟 NOVA LÓGICA DE LOTES UNIFICADOS (Calcula cotas baseadas no valor de R$250)
+    if not taxas_mes.empty:
+        # Pega no valor pago e divide por 250. Um pagamento de 1000 conta logo como 4 casas pagas!
+        cotas_pagas = sum([round(v / 250) for v in taxas_mes["valor"]])
+        pagaram = min(int(cotas_pagas), TOTAL_CASAS)
+    else:
+        pagaram = 0
+        
     arrec_mes = taxas_mes["valor"].sum() if not taxas_mes.empty else 0
     
     saldo_global = entradas - saidas
@@ -222,7 +229,7 @@ if escolha == "📊 Dashboard":
                 if not kpi["mes_iniciado"]:
                     st.info(f"⏳ O balanço para o mês de **{periodo_selecionado}** ainda não foi fechado ou iniciado pelo síndico.")
                 elif not kpi["usuario_pago"]:
-                    st.error(f"⚠️ A taxa de {periodo_selecionado} da **{perfil['bloco_unidade']}** está em aberto.")
+                    st.error(f"⚠️️ A taxa de {periodo_selecionado} da **{perfil['bloco_unidade']}** está em aberto.")
                     if perfil.get("link_boleto"):
                         st.markdown(f'<a href="{perfil["link_boleto"]}" target="_blank"><button style="background:#EF4444;color:white;border:none;padding:10px 20px;border-radius:8px;font-weight:bold;width:100%;cursor:pointer;">📥 Descarregar Boleto</button></a>', unsafe_allow_html=True)
                 else:
@@ -271,7 +278,6 @@ elif escolha == "📑 Relatórios Oficiais":
     st.markdown('<div class="page-title">Relatórios da Gestão</div>', unsafe_allow_html=True)
     st.markdown('<div class="page-subtitle">Comunicados, resumos e transparência emitidos pelo Síndico.</div><br>', unsafe_allow_html=True)
 
-    # Relatório 3: Setembro (Utilizando r"" e escapes \$ para evitar erro de LaTeX verde)
     with st.expander("📄 Relatório Financeiro - Setembro/2026", expanded=True):
         st.markdown(r"""
         <div class="relatorio-box">
@@ -283,10 +289,10 @@ elif escolha == "📑 Relatórios Oficiais":
         <p><b>SETEMBRO/2026</b></p>
         <ul>
             <li><b>Entradas (Arrecadação de Taxas):</b> Recebimentos das cotas regulares e taxa unificada.</li>
-            <li><b>Saídas (Contas de Consumo):</b> R$ 472,18 (Equatorial Energia: faturas de R$ 85,47 e R$ 386,71).</li>
-            <li><b>Saídas (Prestadores de Serviço):</b> R$ 4.525,00 (Jean Pierre: R$ 3.000,00 | Fernando Coelho [Encanador]: R$ 975,00 | Jardineiro: R$ 300,00 | Piscineiro: R$ 250,00).</li>
-            <li><b>Saídas (Materiais e Insumos):</b> R$ 477,12 (Mateus Supermercados, R G de Sousa, Rato Ferragista, Oliveira Construções).</li>
-            <li><b>Saídas (Gestão e Administrativo):</b> R\$ 792,04 (Síndico: R$ 550,00 | PIX Marketplace: R$ 192,04 | Louriane de Assis: R$ 50,00).</li>
+            <li><b>Saídas (Contas de Consumo):</b> R\$ 472,18 (Equatorial Energia: faturas de R\$ 85,47 e R\$ 386,71).</li>
+            <li><b>Saídas (Prestadores de Serviço):</b> R\$ 4.375,00 (Jean Pierre: R\$ 3.000,00 | Fernando Coelho [Encanador]: R\$ 775,00 | El Shaddai Construções: R\$ 600,00).</li>
+            <li><b>Saídas (Materiais e Insumos):</b> R\$ 477,12 (Mateus Supermercados, Uni Cores, R G de Sousa, Rato Ferragista, Oliveira Construções).</li>
+            <li><b>Saídas (Gestão e Administrativo):</b> R\$ 892,04 (Síndico: R\$ 650,00 | PIX Marketplace: R\$ 192,04 | Louriane de Assis: R\$ 50,00).</li>
         </ul>
         
         <p><b>Saldo Atual em Conta:</b> R\$ 1.197,79</p>
@@ -302,7 +308,6 @@ elif escolha == "📑 Relatórios Oficiais":
         </div>
         """, unsafe_allow_html=True)
 
-    # Relatório 2: Agosto
     with st.expander("📄 Relatório Financeiro - Agosto/2026", expanded=False):
         st.markdown(r"""
         <div class="relatorio-box">
@@ -327,7 +332,6 @@ elif escolha == "📑 Relatórios Oficiais":
         </div>
         """, unsafe_allow_html=True)
 
-    # Relatório 1: Julho
     with st.expander("📄 Relatório Financeiro - Julho/2026", expanded=False):
         st.markdown(r"""
         <div class="relatorio-box">
@@ -351,7 +355,6 @@ elif escolha == "📑 Relatórios Oficiais":
         <b>Um abraço, Rômulo Henrique da Silva Lima<br>Síndico - Condomínio Vale das Flores</b>
         </div>
         """, unsafe_allow_html=True)
-
 
 # ─────────────────────────────────────────────
 #  TELA: LANÇAR MOVIMENTAÇÃO (COM IMPORTAÇÃO)
