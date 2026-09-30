@@ -170,6 +170,7 @@ def calcular_kpis(df: pd.DataFrame, casa_logada: str, mes_sel: int, ano_sel: int
     saldo_global = entradas - saidas
     mes_iniciado = not df_mes.empty
     
+    # Validação exclusiva pelo extrato (finanças)
     usuario_pago = casa_logada in taxas_mes["casa_pagadora"].tolist() if not taxas_mes.empty and "casa_pagadora" in taxas_mes.columns else False
     
     return {
@@ -187,6 +188,7 @@ if escolha == "📊 Dashboard":
         st.markdown(f'<div style="margin-bottom:10px;"><img src="data:image/png;base64,{logo_base64}" style="max-width:150px;"></div>', unsafe_allow_html=True)
     st.markdown('<div class="page-title">Painel Financeiro</div><div class="page-subtitle">Transparência e Resultados</div><br>', unsafe_allow_html=True)
     
+    # Atualiza os dados do perfil logado na hora
     res_perfil_atual = supabase.table("perfis").select("*").eq("id", st.session_state.perfil["id"]).single().execute()
     if res_perfil_atual.data:
         perfil = res_perfil_atual.data
@@ -221,26 +223,24 @@ if escolha == "📊 Dashboard":
         kpi = calcular_kpis(df, perfil["bloco_unidade"], mes_sel, ano_sel)
 
         if funcao == "condomino":
-            # ALERTA DE BOLETO EM ATRASO
+            # ALERTA DE BOLETO EM ATRASO (Amplo e sem limite de meses)
             if perfil.get("boleto_atraso"):
-                # Mostra o mês em atraso se o síndico o tiver preenchido
                 meses_atrasados = perfil.get("meses_atraso") or "meses anteriores"
-                st.markdown(f'<div style="background:#FEF2F2; border: 1px solid #EF4444; border-radius: 8px; padding: 20px; margin-bottom: 24px;">'
-                            f'<h4 style="color:#B91C1C; margin-top:0;">🚨 ATENÇÃO: Consta um boleto em atraso</h4>'
-                            f'<p style="color:#991B1B; margin-bottom:10px;">Referente a: <b>{meses_atrasados}</b>. Por favor, regularize a situação para evitarmos a suspensão de serviços.</p>'
-                            f'<a href="{perfil["boleto_atraso"]}" target="_blank"><button style="background:#EF4444;color:white;border:none;padding:10px 20px;border-radius:8px;font-weight:bold;cursor:pointer;">Baixar Boleto em Atraso</button></a>'
+                st.markdown(f'<div style="background:#FEF2F2; border: 1px solid #EF4444; border-radius: 8px; padding: 24px; margin-bottom: 24px;">'
+                            f'<h4 style="color:#B91C1C; margin-top:0;">🚨 ATENÇÃO: Pendências Financeiras</h4>'
+                            f'<p style="color:#991B1B; margin-bottom:15px;">Identificámos pendências referentes a: <b>{meses_atrasados}</b>. Por favor, regularize a situação para evitarmos a suspensão de serviços.</p>'
+                            f'<a href="{perfil["boleto_atraso"]}" target="_blank"><button style="background:#EF4444;color:white;border:none;padding:12px 24px;border-radius:8px;font-weight:bold;cursor:pointer;">Baixar Boleto Atualizado</button></a>'
                             f'</div>', unsafe_allow_html=True)
 
             st.markdown(f"### 📌 Situação da {perfil['bloco_unidade']} ({periodo_selecionado})")
+            
+            # Removido o bloco do comprovativo. Agora ocupa toda a largura!
             if not kpi["mes_iniciado"]:
                 st.info(f"⏳ A faturação deste mês ainda não foi processada.")
             elif not kpi["usuario_pago"]:
-                col_c1, col_c2 = st.columns([2, 1])
-                with col_c1:
-                    st.error(f"⚠️ A taxa deste mês está em aberto.")
-                with col_c2:
-                    if perfil.get("link_boleto"):
-                        st.markdown(f'<a href="{perfil["link_boleto"]}" target="_blank"><button style="background:#3B82F6;color:white;border:none;padding:10px 20px;border-radius:8px;font-weight:bold;width:100%;cursor:pointer;">📥 Descarregar Boleto do Mês</button></a>', unsafe_allow_html=True)
+                st.error(f"⚠️ A taxa deste mês está em aberto.")
+                if perfil.get("link_boleto"):
+                    st.markdown(f'<a href="{perfil["link_boleto"]}" target="_blank"><button style="background:#3B82F6;color:white;border:none;padding:10px 20px;border-radius:8px;font-weight:bold;cursor:pointer;">📥 Descarregar Boleto do Mês</button></a>', unsafe_allow_html=True)
             else:
                 st.success(f"✅ O pagamento deste mês encontra-se regularizado no sistema.")
             st.markdown("---")
@@ -372,7 +372,7 @@ elif escolha == "➕ Lançar Movimentação":
 # ─────────────────────────────────────────────
 elif escolha == "📄 Gestão de Boletos":
     st.markdown('<div class="page-title">Gestão de Boletos e Pagamentos</div>', unsafe_allow_html=True)
-    st.markdown('<div class="page-subtitle">Associe links de cobranças aos moradores.</div><br>', unsafe_allow_html=True)
+    st.markdown('<div class="page-subtitle">Associe links de cobranças e faturas aos moradores.</div><br>', unsafe_allow_html=True)
     
     res_perfis = supabase.table("perfis").select("*").order("bloco_unidade").execute()
     
@@ -385,13 +385,13 @@ elif escolha == "📄 Gestão de Boletos":
             casa_sel = st.selectbox("Selecione o Morador / Casa", list(opcoes.keys()))
             
             st.markdown("---")
-            st.markdown("##### 📅 Emissão do Mês")
-            link_bol = st.text_input("Link do Boleto do Mês (Para pagamento)", placeholder="Cole o link do Google Drive aqui...")
+            st.markdown("##### 📅 Emissão do Mês Atual")
+            link_bol = st.text_input("Link do Boleto do Mês (Para pagamento normal)", placeholder="Cole o link do Google Drive aqui...")
             
-            st.markdown("##### 🚨 Situação de Atraso")
-            col_b1, col_b2 = st.columns([1, 2])
-            meses_atraso = col_b1.text_input("Meses em Atraso", placeholder="Ex: Julho e Agosto")
-            link_atraso = col_b2.text_input("Link do Boleto em Atraso", placeholder="Cole o link do boleto pendente...")
+            st.markdown("##### 🚨 Situação de Atraso (Opcional)")
+            st.info("Preencha estes campos apenas se o morador tiver dívidas antigas. Isto criará um alerta vermelho no painel dele.")
+            meses_atraso = st.text_input("Meses em Atraso (Texto que aparecerá no alerta)", placeholder="Ex: Julho, Agosto, Setembro e Outubro")
+            link_atraso = st.text_input("Link do Boleto de Atraso", placeholder="Cole o link do boleto com o valor atualizado...")
             
             if st.form_submit_button("💾 Guardar / Atualizar Morador"):
                 updates = {}
@@ -412,7 +412,7 @@ elif escolha == "📄 Gestão de Boletos":
         if "boleto_atraso" not in df_view.columns: df_view["boleto_atraso"] = None
         if "meses_atraso" not in df_view.columns: df_view["meses_atraso"] = None
             
-        df_view["link_boleto"] = df_view["link_boleto"].apply(lambda x: "✅" if pd.notnull(x) and x else "❌")
+        df_view["link_boleto"] = df_view["link_boleto"].apply(lambda x: "✅ Anexado" if pd.notnull(x) and x else "❌")
         df_view["boleto_atraso"] = df_view.apply(lambda row: f"🚨 {row['meses_atraso']}" if pd.notnull(row['boleto_atraso']) and row['boleto_atraso'] else "Limpo", axis=1)
         
         df_view = df_view[["bloco_unidade", "nome", "link_boleto", "boleto_atraso"]]
