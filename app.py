@@ -283,10 +283,10 @@ elif escolha == "📑 Relatórios Oficiais":
         <p><b>SETEMBRO/2026</b></p>
         <ul>
             <li><b>Entradas (Arrecadação de Taxas):</b> Recebimentos das cotas regulares e taxa unificada.</li>
-            <li><b>Saídas (Contas de Consumo):</b> R\$ 472,18 (Equatorial Energia: faturas de R\$ 85,47 e R\$ 386,71).</li>
-            <li><b>Saídas (Prestadores de Serviço):</b> R\$ 4.375,00 (Jean Pierre: R\$ 3.000,00 | Fernando Coelho [Encanador]: R\$ 775,00 | El Shaddai Construções: R\$ 600,00).</li>
-            <li><b>Saídas (Materiais e Insumos):</b> R\$ 477,12 (Mateus Supermercados, Uni Cores, R G de Sousa, Rato Ferragista, Oliveira Construções).</li>
-            <li><b>Saídas (Gestão e Administrativo):</b> R\$ 892,04 (Síndico: R\$ 650,00 | PIX Marketplace: R\$ 192,04 | Louriane de Assis: R\$ 50,00).</li>
+            <li><b>Saídas (Contas de Consumo):</b> R$ 472,18 (Equatorial Energia: faturas de R$ 85,47 e R$ 386,71).</li>
+            <li><b>Saídas (Prestadores de Serviço):</b> R$ 4.525,00 (Jean Pierre: R$ 3.000,00 | Fernando Coelho [Encanador]: R$ 975,00 | Jardineiro: R$ 300,00 | Piscineiro: R$ 250,00).</li>
+            <li><b>Saídas (Materiais e Insumos):</b> R$ 477,12 (Mateus Supermercados, R G de Sousa, Rato Ferragista, Oliveira Construções).</li>
+            <li><b>Saídas (Gestão e Administrativo):</b> R\$ 792,04 (Síndico: R$ 550,00 | PIX Marketplace: R$ 192,04 | Louriane de Assis: R$ 50,00).</li>
         </ul>
         
         <p><b>Saldo Atual em Conta:</b> R\$ 1.197,79</p>
