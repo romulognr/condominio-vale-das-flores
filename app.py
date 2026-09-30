@@ -51,8 +51,8 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 .stTextInput > div > div > input, .stNumberInput > div > div > input, .stSelectbox > div > div { border-radius: 8px !important; border: 1.5px solid #E2E8F0 !important; font-size: 14px !important; }
 .stForm [data-testid="stFormSubmitButton"] > button { background: #1E3A5F !important; color: white !important; border: none !important; padding: 10px 24px !important; border-radius: 8px !important; font-weight: 600 !important; }
 .badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
-.badge-sindico { background: #DBEAFE; color: #1E40AF; }
-.badge-condomino { background: #D1FAE5; color: #065F46; }
+.badge-sindico { background: #DBEAFE !important; color: #1E40AF !important; }
+.badge-condomino { background: #D1FAE5 !important; color: #065F46 !important; }
 .page-title { font-size: 26px; font-weight: 700; color: #0F1B2D; margin-bottom: 4px; }
 .page-subtitle { font-size: 14px; color: #64748B; margin-bottom: 0; }
 .login-btn button { background: #1E3A5F !important; color: white !important; border: none !important; border-radius: 10px !important; height: 46px !important; font-weight: 600 !important; font-size: 15px !important; width: 100%; }
@@ -161,8 +161,8 @@ def calcular_kpis(df: pd.DataFrame, casa_logada: str, mes_sel: int, ano_sel: int
     saidas   = df[df["tipo"] == "saida"]["valor"].sum() if not df.empty else 0
     
     df_mes = df[(df["data"].dt.month == mes_sel) & (df["data"].dt.year == ano_sel)] if not df.empty else pd.DataFrame()
-    
     taxas_mes = df_mes[(df_mes["categoria"] == "Taxa Condominial") & (df_mes["tipo"] == "entrada")] if not df_mes.empty else pd.DataFrame()
+    
     if not taxas_mes.empty:
         cotas_pagas = sum([round(v / 250) for v in taxas_mes["valor"]])
         pagaram = min(int(cotas_pagas), TOTAL_CASAS)
