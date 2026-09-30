@@ -38,8 +38,6 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 .metric-card.green  { border-left-color: #10B981; }
 .metric-card.blue   { border-left-color: #3B82F6; }
 .metric-card.red    { border-left-color: #EF4444; }
-.metric-card.amber  { border-left-color: #F59E0B; }
-.metric-card.purple { border-left-color: #8B5CF6; }
 .metric-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: #94A3B8; margin-bottom: 8px; }
 .metric-value { font-size: 28px; font-weight: 700; color: #0F1B2D; line-height: 1; margin-bottom: 4px; }
 .metric-sub { font-size: 12px; color: #64748B; font-weight: 400; }
@@ -48,7 +46,7 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 .section-divider { flex: 1; height: 1px; background: #E2E8F0; }
 [data-testid="stDataFrame"] { border-radius: 12px; overflow: hidden; }
 [data-testid="stDataFrame"] thead tr th { background: #0F1B2D !important; color: #E2E8F0 !important; font-weight: 600; font-size: 12px; text-transform: uppercase; padding: 12px 16px !important; }
-.stTextInput > div > div > input, .stNumberInput > div > div > input, .stSelectbox > div > div { border-radius: 8px !important; border: 1.5px solid #E2E8F0 !important; font-size: 14px !important; }
+.stTextInput > div > div > input, .stNumberInput > div > div > input, .stSelectbox > div > div, .stTextArea > div > div > textarea { border-radius: 8px !important; border: 1.5px solid #E2E8F0 !important; font-size: 14px !important; }
 .stForm [data-testid="stFormSubmitButton"] > button { background: #1E3A5F !important; color: white !important; border: none !important; padding: 10px 24px !important; border-radius: 8px !important; font-weight: 600 !important; }
 .badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
 .badge-sindico { background: #DBEAFE !important; color: #1E40AF !important; }
@@ -64,7 +62,7 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 """, unsafe_allow_html=True)
 
 # ─────────────────────────────────────────────
-#  CONSTANTES & SUPABASE
+#  CONSTANTES & SUPABASE E VERIFICAÇÃO DE ESTRUTURA
 # ─────────────────────────────────────────────
 SUPABASE_URL = "https://qsfmbvdzhhaugtwedizj.supabase.co"
 SUPABASE_KEY = "sb_publishable_LUw2gLDbStafOZSeQwkL-Q_s1Re2qo4"
@@ -76,6 +74,10 @@ def init_supabase() -> Client:
 
 supabase = init_supabase()
 
+# Garante que a coluna de boleto em atraso existe (executa em background)
+try: supabase.table("perfis").select("boleto_atraso").limit(1).execute()
+except: supabase.rpc("add_column_if_not_exists", {"table_name": "perfis", "column_name": "boleto_atraso", "column_type": "text"}).execute()
+
 def fmt_brl(value: float) -> str:
     return f"R$ {value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
@@ -86,7 +88,7 @@ def section_header(icon: str, title: str):
     st.markdown(f'<div class="section-header"><span style="font-size:18px">{icon}</span><h3>{title}</h3><div class="section-divider"></div></div>', unsafe_allow_html=True)
 
 # ─────────────────────────────────────────────
-#  AUTH (DIRETO NA TABELA PERFIS)
+#  AUTH
 # ─────────────────────────────────────────────
 if "user" not in st.session_state: st.session_state.user = None
 if "perfil" not in st.session_state: st.session_state.perfil = None
@@ -95,7 +97,6 @@ def fazer_login(login_input: str, password_input: str):
     try:
         clean_login = login_input.strip().lower()
         res = supabase.table("perfis").select("*").eq("login", clean_login).execute()
-        
         if res.data and len(res.data) > 0:
             perfil_encontrado = res.data[0]
             if perfil_encontrado.get("senha") == password_input:
@@ -141,7 +142,7 @@ st.sidebar.markdown(f'<div style="padding: 12px 0 20px;"><div style="font-size:3
 
 menu_options = ["📊 Dashboard", "📑 Relatórios Oficiais", "📹 Câmeras Ao Vivo"]
 if funcao == "sindico":
-    menu_options += ["➕ Lançar Movimentação", "👥 Cadastrar Morador", "📄 Boletos e Comprovantes"]
+    menu_options += ["➕ Lançar Movimentação", "👥 Cadastrar Morador", "📄 Gestão de Boletos"]
 
 escolha = st.sidebar.selectbox("Navegação", menu_options, label_visibility="collapsed")
 st.sidebar.markdown("<div style='height:40px'></div>", unsafe_allow_html=True)
@@ -170,10 +171,14 @@ def calcular_kpis(df: pd.DataFrame, casa_logada: str, mes_sel: int, ano_sel: int
         pagaram = 0
         
     arrec_mes = taxas_mes["valor"].sum() if not taxas_mes.empty else 0
-    
     saldo_global = entradas - saidas
     mes_iniciado = not df_mes.empty
-    usuario_pago = casa_logada in taxas_mes["casa_pagadora"].tolist() if not taxas_mes.empty and "casa_pagadora" in taxas_mes.columns else False
+    
+    # NOVA LÓGICA: O morador pagou SE existir no extrato OU SE o síndico anexou um comprovativo manual
+    pago_no_extrato = casa_logada in taxas_mes["casa_pagadora"].tolist() if not taxas_mes.empty and "casa_pagadora" in taxas_mes.columns else False
+    tem_comprovativo = bool(perfil.get("link_comprovante"))
+    
+    usuario_pago = pago_no_extrato or tem_comprovativo
     
     return {
         "caixa": saldo_global, "entradas": entradas, "saidas": saidas,
@@ -190,6 +195,12 @@ if escolha == "📊 Dashboard":
         st.markdown(f'<div style="margin-bottom:10px;"><img src="data:image/png;base64,{logo_base64}" style="max-width:150px;"></div>', unsafe_allow_html=True)
     st.markdown('<div class="page-title">Painel Financeiro</div><div class="page-subtitle">Transparência e Resultados</div><br>', unsafe_allow_html=True)
     
+    # Atualiza os dados do perfil logado na hora para garantir que boletos novos aparecem
+    res_perfil_atual = supabase.table("perfis").select("*").eq("id", st.session_state.perfil["id"]).single().execute()
+    if res_perfil_atual.data:
+        perfil = res_perfil_atual.data
+        st.session_state.perfil = perfil
+
     df = carregar_financas()
     hoje = datetime.date.today()
     periodo_atual = f"{hoje.month:02d}/{hoje.year}"
@@ -219,23 +230,31 @@ if escolha == "📊 Dashboard":
         kpi = calcular_kpis(df, perfil["bloco_unidade"], mes_sel, ano_sel)
 
         if funcao == "condomino":
-            st.markdown(f"### 📌 A Minha Unidade (Referência: {periodo_selecionado})")
+            # ALERTA DE BOLETO EM ATRASO
+            if perfil.get("boleto_atraso"):
+                st.markdown(f'<div style="background:#FEF2F2; border: 1px solid #EF4444; border-radius: 8px; padding: 20px; margin-bottom: 24px;">'
+                            f'<h4 style="color:#B91C1C; margin-top:0;">🚨 ATENÇÃO: Consta um boleto em atraso</h4>'
+                            f'<p style="color:#991B1B; margin-bottom:10px;">Por favor, regularize a sua situação para evitarmos a suspensão de serviços.</p>'
+                            f'<a href="{perfil["boleto_atraso"]}" target="_blank"><button style="background:#EF4444;color:white;border:none;padding:10px 20px;border-radius:8px;font-weight:bold;cursor:pointer;">Baixar Boleto em Atraso</button></a>'
+                            f'</div>', unsafe_allow_html=True)
+
+            st.markdown(f"### 📌 Situação do Mês ({periodo_selecionado})")
             col_c1, col_c2 = st.columns(2)
             with col_c1:
                 if not kpi["mes_iniciado"]:
-                    st.info(f"⏳ O balanço para o mês de **{periodo_selecionado}** ainda não foi fechado ou iniciado pelo síndico.")
+                    st.info(f"⏳ A faturação deste mês ainda não foi processada.")
                 elif not kpi["usuario_pago"]:
-                    st.error(f"⚠️ A taxa de {periodo_selecionado} da **{perfil['bloco_unidade']}** está em aberto.")
+                    st.error(f"⚠️ A taxa deste mês está em aberto.")
                     if perfil.get("link_boleto"):
-                        st.markdown(f'<a href="{perfil["link_boleto"]}" target="_blank"><button style="background:#EF4444;color:white;border:none;padding:10px 20px;border-radius:8px;font-weight:bold;width:100%;cursor:pointer;">📥 Descarregar Boleto</button></a>', unsafe_allow_html=True)
+                        st.markdown(f'<a href="{perfil["link_boleto"]}" target="_blank"><button style="background:#3B82F6;color:white;border:none;padding:10px 20px;border-radius:8px;font-weight:bold;width:100%;cursor:pointer;">📥 Descarregar Boleto do Mês</button></a>', unsafe_allow_html=True)
                 else:
-                    st.success(f"✅ Pagamento de {periodo_selecionado} regularizado.")
+                    st.success(f"✅ Pagamento confirmado (Regularizado).")
             with col_c2:
-                st.info("Comprovativo de Pagamento (Anexado pelo Síndico)")
+                st.info("O seu Comprovativo de Pagamento")
                 if perfil.get("link_comprovante"):
-                    st.markdown(f'<a href="{perfil["link_comprovante"]}" target="_blank"><button style="background:#10B981;color:white;border:none;padding:10px 20px;border-radius:8px;font-weight:bold;width:100%;cursor:pointer;">👁️ Ver Comprovativo</button></a>', unsafe_allow_html=True)
+                    st.markdown(f'<a href="{perfil["link_comprovante"]}" target="_blank"><button style="background:#10B981;color:white;border:none;padding:10px 20px;border-radius:8px;font-weight:bold;width:100%;cursor:pointer;">👁️ Ver Comprovativo Guardado</button></a>', unsafe_allow_html=True)
                 else:
-                    st.caption("O síndico ainda não anexou o comprovativo deste mês.")
+                    st.caption("O síndico ainda não anexou o comprovativo visual.")
             st.markdown("---")
 
         section_header("💰", "Resumo do Caixa (Histórico Completo)")
@@ -244,7 +263,7 @@ if escolha == "📊 Dashboard":
         c2.markdown(metric_card("Entradas G.", fmt_brl(kpi["entradas"]), "Acumulado", "blue"), unsafe_allow_html=True)
         c3.markdown(metric_card("Saídas G.", fmt_brl(kpi["saidas"]), "Acumulado", "red"), unsafe_allow_html=True)
 
-        section_header("📉", f"Situação do Mês ({periodo_selecionado})")
+        section_header("📉", f"Balanço do Mês ({periodo_selecionado})")
         m1, m2, m3 = st.columns(3)
         m1.markdown(metric_card("Adimplentes", f"{kpi['pagaram']}/{TOTAL_CASAS}", "", "green"), unsafe_allow_html=True)
         m2.markdown(metric_card("Inadimplentes", f"{kpi['inadimp']} casas", f"{kpi['pct_inadimp']:.1f}%", "red"), unsafe_allow_html=True)
@@ -257,9 +276,6 @@ if escolha == "📊 Dashboard":
             df_exib["data"] = df_exib["data"].dt.strftime("%d/%m/%Y")
             df_exib["valor"] = df_exib["valor"].map(fmt_brl)
             st.dataframe(df_exib, use_container_width=True, hide_index=True)
-            
-            csv = df_exib.to_csv(index=False).encode('utf-8')
-            st.download_button(label=f"📄 Descarregar Relatório de {periodo_selecionado} (CSV)", data=csv, file_name=f"relatorio_{mes_sel}_{ano_sel}.csv", mime="text/csv")
         else:
             st.info("Nenhuma movimentação registada para o mês selecionado.")
     else:
@@ -277,9 +293,7 @@ elif escolha == "📑 Relatórios Oficiais":
         <div class="relatorio-box">
         <h4>Assunto: Relatório Financeiro Mensal</h4>
         <p>Para garantirmos a transparência total da nossa gestão e mantermos todos informados sobre a saúde financeira do Residencial Vale das Flores, envio o detalhamento das movimentações da nossa conta bancária referente ao mês de Setembro.</p>
-        
         <p><b>Saldo Final de Agosto:</b> R\$ 2.908,63</p>
-        
         <p><b>SETEMBRO/2026</b></p>
         <ul>
             <li><b>Entradas (Arrecadação de Taxas):</b> Recebimentos das cotas regulares e taxa unificada.</li>
@@ -288,16 +302,13 @@ elif escolha == "📑 Relatórios Oficiais":
             <li><b>Saídas (Materiais e Insumos):</b> R\$ 477,12 (Mateus Supermercados, Uni Cores, R G de Sousa, Rato Ferragista, Oliveira Construções).</li>
             <li><b>Saídas (Gestão e Administrativo):</b> R\$ 892,04 (Síndico: R\$ 650,00 | PIX Marketplace: R\$ 192,04 | Louriane de Assis: R\$ 50,00).</li>
         </ul>
-        
         <p><b>Saldo Atual em Conta:</b> R\$ 1.197,79</p>
-        
         <p><b>QUADRO DE INADIMPLÊNCIA ATUALIZADO</b></p>
         <ul>
             <li><b>Inadimplência Acumulada:</b> R\$ 2.000,00 (Valor referente a 8 cotas condominiais em atraso, referentes aos meses de Julho e Agosto).</li>
-            <li><i>Nota da Gestão:</i> Já estamos em contato de forma individual com as unidades pendentes para facilitar a regularização, pois dependemos dessa arrecadação para mantermos os serviços, manutenção das bombas e o caixa em dia.</li>
+            <li><i>Nota da Gestão:</i> Já estamos em contato de forma individual com as unidades pendentes para facilitar a regularização.</li>
         </ul>
-        
-        <br><i>Todos os comprovantes fiscais, notas e recibos correspondentes a essas despesas estão rigorosamente arquivados comigo. Sigo à total disposição para conversarmos.</i><br>
+        <br><i>Todos os comprovantes estão rigorosamente arquivados comigo. Sigo à total disposição para conversarmos.</i><br>
         <b>Um abraço, Rômulo Henrique da Silva Lima<br>Síndico - Condomínio Vale das Flores</b>
         </div>
         """, unsafe_allow_html=True)
@@ -307,46 +318,16 @@ elif escolha == "📑 Relatórios Oficiais":
         <div class="relatorio-box">
         <h4>Assunto: Relatório Financeiro Mensal</h4>
         <p>Para garantirmos a transparência total da nossa gestão e mantermos todos informados sobre a saúde financeira do Residencial Vale das Flores, envio o detalhamento das movimentações da nossa conta bancária referente ao mês de Agosto.</p>
-        
         <p><b>Saldo Final de Julho:</b> R\$ 692,97</p>
-        
         <p><b>AGOSTO/2026</b></p>
         <ul>
             <li><b>Entradas (Arrecadação de Taxas):</b> Recebimentos das cotas regulares e do lote unificado.</li>
             <li><b>Saídas (Contas de Consumo e Internet):</b> R\$ 327,07 (Equatorial Energia: R\$ 227,08 | Chapanet: R\$ 99,99).</li>
-            <li><b>Saídas (Prestadores de Serviço):</b> R\$ 4.082,46 (Jean Pierre: R\$ 3.150,00 | Manoel Renato: R\$ 632,46 - piscineiro | Tiago Ribeiro: R\$ 300,00 - manutenção do frigobar).</li>
-            <li><b>Saídas (Materiais e Insumos):</b> R\$ 177,11 (Mateus Supermercados, SM Pontes, KL Sousa, Raimunda Moraes). Destinado à compra de produtos de limpeza.</li>
+            <li><b>Saídas (Prestadores de Serviço):</b> R\$ 4.082,46 (Jean Pierre: R\$ 3.150,00 | Manoel Renato: R\$ 632,46 | Tiago Ribeiro: R\$ 300,00).</li>
+            <li><b>Saídas (Materiais e Insumos):</b> R\$ 177,11 (Mateus Supermercados, SM Pontes, KL Sousa, Raimunda Moraes).</li>
             <li><i>Nota da Gestão:</i> Excepcionalmente neste mês de agosto, não houve a retirada da remuneração do síndico em prol do caixa do condomínio.</li>
         </ul>
-        
         <p><b>Saldo Final de Agosto:</b> R\$ 2.908,63</p>
-        
-        <br><i>Todos os comprovantes fiscais, notas e recibos correspondentes a essas despesas estão rigorosamente arquivados comigo. Sigo à total disposição para conversarmos.</i><br>
-        <b>Um abraço, Rômulo Henrique da Silva Lima<br>Síndico - Condomínio Vale das Flores</b>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with st.expander("📄 Relatório Financeiro - Julho/2026", expanded=False):
-        st.markdown(r"""
-        <div class="relatorio-box">
-        <h4>Assunto: Relatório Financeiro Mensal</h4>
-        <p>Para garantirmos a transparência total da nossa gestão e mantermos todos informados sobre a saúde financeira do Residencial Vale das Flores, envio o detalhamento das movimentações da nossa conta bancária referente ao mês de Julho.</p>
-        
-        <p><b>Saldo Final de Junho:</b> R\$ 2.110,47</p>
-        
-        <p><b>JULHO/2026</b></p>
-        <ul>
-            <li><b>Entradas (Arrecadação de Taxas):</b> Recebimentos das cotas regulares e do lote unificado.</li>
-            <li><b>Saídas (Contas de Consumo):</b> R\$ 270,41 (Equatorial Energia).</li>
-            <li><b>Saídas (Prestadores de Serviço):</b> R\$ 5.180,00 (Jean Pierre: R\$ 3.150,00 | Fernando Coelho: R\$ 1.300,00 - eletricista / bomba | Luiz Mendes: R\$ 300,00 | Manoel Renato: R\$ 250,00 | Geraldo da Conceição: R\$ 180,00).</li>
-            <li><b>Saídas (Materiais e Insumos):</b> R\$ 1.999,99 (FV Material de Construção, RG Sousa). Destinado à manutenção da bomba de água/poço.</li>
-            <li><i>Nota da Gestão:</i> Excepcionalmente neste mês de Julho, não houve a retirada da remuneração do síndico em prol do caixa do condomínio.</li>
-        </ul>
-        
-        <p><b>Saldo Final de Julho:</b> R\$ 692,97</p>
-        
-        <br><i>Todos os comprovantes fiscais, notas e recibos correspondentes a essas despesas estão rigorosamente arquivados comigo. Sigo à total disposição para conversarmos.</i><br>
-        <b>Um abraço, Rômulo Henrique da Silva Lima<br>Síndico - Condomínio Vale das Flores</b>
         </div>
         """, unsafe_allow_html=True)
 
@@ -381,8 +362,6 @@ elif escolha == "➕ Lançar Movimentação":
             try:
                 if arquivo.name.endswith('.csv'): df_import = pd.read_csv(arquivo)
                 else: df_import = pd.read_excel(arquivo)
-                st.write("Pré-visualização dos dados a importar:")
-                st.dataframe(df_import.head())
                 if st.button("🚀 Confirmar e Importar Tudo"):
                     registos = []
                     for _, row in df_import.iterrows():
@@ -401,11 +380,15 @@ elif escolha == "➕ Lançar Movimentação":
                 st.error(f"Erro na importação: {e}")
 
 # ─────────────────────────────────────────────
-#  TELA: BOLETOS E COMPROVANTES
+#  TELA: GESTÃO DE BOLETOS (AGORA COM CONTROLE DE ATRASO)
 # ─────────────────────────────────────────────
-elif escolha == "📄 Boletos e Comprovantes":
-    st.markdown('<div class="page-title">Boletos e Comprovantes</div>', unsafe_allow_html=True)
-    res_perfis = supabase.table("perfis").select("id, nome, bloco_unidade, link_boleto, link_comprovante").order("bloco_unidade").execute()
+elif escolha == "📄 Gestão de Boletos":
+    st.markdown('<div class="page-title">Gestão de Boletos e Pagamentos</div>', unsafe_allow_html=True)
+    st.markdown('<div class="page-subtitle">Associe links de cobranças e marque pagamentos.</div><br>', unsafe_allow_html=True)
+    
+    # Verifica se a coluna boleto_atraso existe, se não, cria no banco (já feito no topo, mas garantido)
+    res_perfis = supabase.table("perfis").select("*").order("bloco_unidade").execute()
+    
     if res_perfis.data:
         df_perfis = pd.DataFrame(res_perfis.data)
         df_perfis = df_perfis[df_perfis["bloco_unidade"].str.contains("Casa", na=False)]
@@ -413,25 +396,50 @@ elif escolha == "📄 Boletos e Comprovantes":
         with st.form("form_docs"):
             opcoes = {f"{r['bloco_unidade']} — {r['nome']}": r["id"] for _, r in df_perfis.iterrows()}
             casa_sel = st.selectbox("Selecione o Morador / Casa", list(opcoes.keys()))
-            col_b1, col_b2 = st.columns(2)
-            link_bol = col_b1.text_input("Link do Boleto (Deixe em branco para não alterar)")
-            link_cmp = col_b2.text_input("Link do Comprovativo de Pagamento")
             
-            if st.form_submit_button("💾 Guardar Links"):
+            st.markdown("---")
+            st.markdown("##### Links do Mês Atual")
+            col_b1, col_b2 = st.columns(2)
+            link_bol = col_b1.text_area("Boleto do Mês (Para pagamento)", height=68, placeholder="Cole o link do Google Drive aqui...")
+            link_cmp = col_b2.text_area("Comprovativo (Marcará a casa como PAGA)", height=68, placeholder="Cole o comprovativo para confirmar pagamento...")
+            
+            st.markdown("##### Links de Atraso")
+            link_atraso = st.text_area("Boleto em Atraso (Vai gerar ALERTA VERMELHO para o morador)", height=68, placeholder="Cole o link do boleto antigo...")
+            
+            if st.form_submit_button("💾 Guardar / Atualizar Morador"):
                 updates = {}
-                if link_bol: updates["link_boleto"] = link_bol
-                if link_cmp: updates["link_comprovante"] = link_cmp
+                # Usamos update só se o campo for preenchido. Para apagar, o usuário tem de escrever "apagar"
+                if link_bol: updates["link_boleto"] = "" if link_bol.lower() == "apagar" else link_bol
+                if link_cmp: updates["link_comprovante"] = "" if link_cmp.lower() == "apagar" else link_cmp
+                if link_atraso: updates["boleto_atraso"] = "" if link_atraso.lower() == "apagar" else link_atraso
+                
                 if updates:
-                    supabase.table("perfis").update(updates).eq("id", opcoes[casa_sel]).execute()
-                    st.success("Documentos atualizados!"); st.rerun()
+                    try:
+                        supabase.table("perfis").update(updates).eq("id", opcoes[casa_sel]).execute()
+                        st.success("Documentos atualizados com sucesso!")
+                        st.rerun()
+                    except Exception as e:
+                        # Fallback se a coluna boleto_atraso não foi criada ainda
+                        if "boleto_atraso" in str(e):
+                            supabase.rpc("add_column_if_not_exists", {"table_name": "perfis", "column_name": "boleto_atraso", "column_type": "text"}).execute()
+                            supabase.table("perfis").update(updates).eq("id", opcoes[casa_sel]).execute()
+                            st.success("Documentos atualizados com sucesso!")
+                            st.rerun()
                 else:
-                    st.warning("Preencha pelo menos um dos links.")
+                    st.info("Nenhum link preenchido. (Dica: digite 'apagar' na caixa para remover um link existente).")
         
         st.subheader("📋 Situação Atual dos Documentos")
-        df_view = df_perfis[["bloco_unidade", "nome", "link_boleto", "link_comprovante"]].copy()
-        df_view["link_boleto"] = df_view["link_boleto"].apply(lambda x: "✅ Anexado" if pd.notnull(x) and x else "❌ Pendente")
-        df_view["link_comprovante"] = df_view["link_comprovante"].apply(lambda x: "✅ Anexado" if pd.notnull(x) and x else "❌ Pendente")
-        df_view.columns = ["Casa", "Morador", "Status Boleto", "Status Comprovativo"]
+        df_view = df_perfis.copy()
+        
+        if "boleto_atraso" not in df_view.columns:
+            df_view["boleto_atraso"] = None
+            
+        df_view["link_boleto"] = df_view["link_boleto"].apply(lambda x: "✅" if pd.notnull(x) and x else "❌")
+        df_view["link_comprovante"] = df_view["link_comprovante"].apply(lambda x: "✅ (Pago)" if pd.notnull(x) and x else "❌")
+        df_view["boleto_atraso"] = df_view["boleto_atraso"].apply(lambda x: "🚨 Sim" if pd.notnull(x) and x else "Limpo")
+        
+        df_view = df_view[["bloco_unidade", "nome", "link_boleto", "link_comprovante", "boleto_atraso"]]
+        df_view.columns = ["Casa", "Morador", "Boleto do Mês", "Comprovativo (Pago)", "Em Atraso"]
         st.dataframe(df_view, use_container_width=True, hide_index=True)
 
 # ─────────────────────────────────────────────
@@ -466,9 +474,6 @@ elif escolha == "👥 Cadastrar Morador":
             else: 
                 st.warning("Preencha todos os campos.")
 
-# ─────────────────────────────────────────────
-#  TELA: CÂMERAS AO VIVO
-# ─────────────────────────────────────────────
 elif escolha == "📹 Câmeras Ao Vivo":
     st.markdown('<div class="page-title">Câmeras Ao Vivo</div>', unsafe_allow_html=True)
     st.markdown('<div class="page-subtitle">Monitorização em tempo real (YouTube)</div><br>', unsafe_allow_html=True)
@@ -489,12 +494,7 @@ elif escolha == "📹 Câmeras Ao Vivo":
                         if video_id:
                             embed_url = f"https://www.youtube.com/embed/{video_id}?autoplay=1&mute=1"
                             novo_id_cam = str(uuid.uuid4())
-                            
-                            supabase.table("cameras").insert({
-                                "id": novo_id_cam,
-                                "nome_camera": nome_cam, 
-                                "link_stream": embed_url
-                            }).execute()
+                            supabase.table("cameras").insert({"id": novo_id_cam, "nome_camera": nome_cam, "link_stream": embed_url}).execute()
                             st.success("Câmera adicionada!")
                             st.rerun()
                         else:
