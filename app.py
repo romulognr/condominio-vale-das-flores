@@ -62,7 +62,7 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 """, unsafe_allow_html=True)
 
 # ─────────────────────────────────────────────
-#  CONSTANTES & SUPABASE E VERIFICAÇÃO DE ESTRUTURA
+#  CONSTANTES & SUPABASE
 # ─────────────────────────────────────────────
 SUPABASE_URL = "https://qsfmbvdzhhaugtwedizj.supabase.co"
 SUPABASE_KEY = "sb_publishable_LUw2gLDbStafOZSeQwkL-Q_s1Re2qo4"
@@ -73,10 +73,6 @@ def init_supabase() -> Client:
     return create_client(SUPABASE_URL, SUPABASE_KEY)
 
 supabase = init_supabase()
-
-# Garante que a coluna de boleto em atraso existe (executa em background)
-try: supabase.table("perfis").select("boleto_atraso").limit(1).execute()
-except: supabase.rpc("add_column_if_not_exists", {"table_name": "perfis", "column_name": "boleto_atraso", "column_type": "text"}).execute()
 
 def fmt_brl(value: float) -> str:
     return f"R$ {value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
@@ -174,11 +170,7 @@ def calcular_kpis(df: pd.DataFrame, casa_logada: str, mes_sel: int, ano_sel: int
     saldo_global = entradas - saidas
     mes_iniciado = not df_mes.empty
     
-    # NOVA LÓGICA: O morador pagou SE existir no extrato OU SE o síndico anexou um comprovativo manual
-    pago_no_extrato = casa_logada in taxas_mes["casa_pagadora"].tolist() if not taxas_mes.empty and "casa_pagadora" in taxas_mes.columns else False
-    tem_comprovativo = bool(perfil.get("link_comprovante"))
-    
-    usuario_pago = pago_no_extrato or tem_comprovativo
+    usuario_pago = casa_logada in taxas_mes["casa_pagadora"].tolist() if not taxas_mes.empty and "casa_pagadora" in taxas_mes.columns else False
     
     return {
         "caixa": saldo_global, "entradas": entradas, "saidas": saidas,
@@ -195,7 +187,6 @@ if escolha == "📊 Dashboard":
         st.markdown(f'<div style="margin-bottom:10px;"><img src="data:image/png;base64,{logo_base64}" style="max-width:150px;"></div>', unsafe_allow_html=True)
     st.markdown('<div class="page-title">Painel Financeiro</div><div class="page-subtitle">Transparência e Resultados</div><br>', unsafe_allow_html=True)
     
-    # Atualiza os dados do perfil logado na hora para garantir que boletos novos aparecem
     res_perfil_atual = supabase.table("perfis").select("*").eq("id", st.session_state.perfil["id"]).single().execute()
     if res_perfil_atual.data:
         perfil = res_perfil_atual.data
@@ -232,29 +223,26 @@ if escolha == "📊 Dashboard":
         if funcao == "condomino":
             # ALERTA DE BOLETO EM ATRASO
             if perfil.get("boleto_atraso"):
+                # Mostra o mês em atraso se o síndico o tiver preenchido
+                meses_atrasados = perfil.get("meses_atraso") or "meses anteriores"
                 st.markdown(f'<div style="background:#FEF2F2; border: 1px solid #EF4444; border-radius: 8px; padding: 20px; margin-bottom: 24px;">'
                             f'<h4 style="color:#B91C1C; margin-top:0;">🚨 ATENÇÃO: Consta um boleto em atraso</h4>'
-                            f'<p style="color:#991B1B; margin-bottom:10px;">Por favor, regularize a sua situação para evitarmos a suspensão de serviços.</p>'
+                            f'<p style="color:#991B1B; margin-bottom:10px;">Referente a: <b>{meses_atrasados}</b>. Por favor, regularize a situação para evitarmos a suspensão de serviços.</p>'
                             f'<a href="{perfil["boleto_atraso"]}" target="_blank"><button style="background:#EF4444;color:white;border:none;padding:10px 20px;border-radius:8px;font-weight:bold;cursor:pointer;">Baixar Boleto em Atraso</button></a>'
                             f'</div>', unsafe_allow_html=True)
 
-            st.markdown(f"### 📌 Situação do Mês ({periodo_selecionado})")
-            col_c1, col_c2 = st.columns(2)
-            with col_c1:
-                if not kpi["mes_iniciado"]:
-                    st.info(f"⏳ A faturação deste mês ainda não foi processada.")
-                elif not kpi["usuario_pago"]:
+            st.markdown(f"### 📌 Situação da {perfil['bloco_unidade']} ({periodo_selecionado})")
+            if not kpi["mes_iniciado"]:
+                st.info(f"⏳ A faturação deste mês ainda não foi processada.")
+            elif not kpi["usuario_pago"]:
+                col_c1, col_c2 = st.columns([2, 1])
+                with col_c1:
                     st.error(f"⚠️ A taxa deste mês está em aberto.")
+                with col_c2:
                     if perfil.get("link_boleto"):
                         st.markdown(f'<a href="{perfil["link_boleto"]}" target="_blank"><button style="background:#3B82F6;color:white;border:none;padding:10px 20px;border-radius:8px;font-weight:bold;width:100%;cursor:pointer;">📥 Descarregar Boleto do Mês</button></a>', unsafe_allow_html=True)
-                else:
-                    st.success(f"✅ Pagamento confirmado (Regularizado).")
-            with col_c2:
-                st.info("O seu Comprovativo de Pagamento")
-                if perfil.get("link_comprovante"):
-                    st.markdown(f'<a href="{perfil["link_comprovante"]}" target="_blank"><button style="background:#10B981;color:white;border:none;padding:10px 20px;border-radius:8px;font-weight:bold;width:100%;cursor:pointer;">👁️ Ver Comprovativo Guardado</button></a>', unsafe_allow_html=True)
-                else:
-                    st.caption("O síndico ainda não anexou o comprovativo visual.")
+            else:
+                st.success(f"✅ O pagamento deste mês encontra-se regularizado no sistema.")
             st.markdown("---")
 
         section_header("💰", "Resumo do Caixa (Histórico Completo)")
@@ -380,13 +368,12 @@ elif escolha == "➕ Lançar Movimentação":
                 st.error(f"Erro na importação: {e}")
 
 # ─────────────────────────────────────────────
-#  TELA: GESTÃO DE BOLETOS (AGORA COM CONTROLE DE ATRASO)
+#  TELA: GESTÃO DE BOLETOS
 # ─────────────────────────────────────────────
 elif escolha == "📄 Gestão de Boletos":
     st.markdown('<div class="page-title">Gestão de Boletos e Pagamentos</div>', unsafe_allow_html=True)
-    st.markdown('<div class="page-subtitle">Associe links de cobranças e marque pagamentos.</div><br>', unsafe_allow_html=True)
+    st.markdown('<div class="page-subtitle">Associe links de cobranças aos moradores.</div><br>', unsafe_allow_html=True)
     
-    # Verifica se a coluna boleto_atraso existe, se não, cria no banco (já feito no topo, mas garantido)
     res_perfis = supabase.table("perfis").select("*").order("bloco_unidade").execute()
     
     if res_perfis.data:
@@ -398,48 +385,38 @@ elif escolha == "📄 Gestão de Boletos":
             casa_sel = st.selectbox("Selecione o Morador / Casa", list(opcoes.keys()))
             
             st.markdown("---")
-            st.markdown("##### Links do Mês Atual")
-            col_b1, col_b2 = st.columns(2)
-            link_bol = col_b1.text_area("Boleto do Mês (Para pagamento)", height=68, placeholder="Cole o link do Google Drive aqui...")
-            link_cmp = col_b2.text_area("Comprovativo (Marcará a casa como PAGA)", height=68, placeholder="Cole o comprovativo para confirmar pagamento...")
+            st.markdown("##### 📅 Emissão do Mês")
+            link_bol = st.text_input("Link do Boleto do Mês (Para pagamento)", placeholder="Cole o link do Google Drive aqui...")
             
-            st.markdown("##### Links de Atraso")
-            link_atraso = st.text_area("Boleto em Atraso (Vai gerar ALERTA VERMELHO para o morador)", height=68, placeholder="Cole o link do boleto antigo...")
+            st.markdown("##### 🚨 Situação de Atraso")
+            col_b1, col_b2 = st.columns([1, 2])
+            meses_atraso = col_b1.text_input("Meses em Atraso", placeholder="Ex: Julho e Agosto")
+            link_atraso = col_b2.text_input("Link do Boleto em Atraso", placeholder="Cole o link do boleto pendente...")
             
             if st.form_submit_button("💾 Guardar / Atualizar Morador"):
                 updates = {}
-                # Usamos update só se o campo for preenchido. Para apagar, o usuário tem de escrever "apagar"
                 if link_bol: updates["link_boleto"] = "" if link_bol.lower() == "apagar" else link_bol
-                if link_cmp: updates["link_comprovante"] = "" if link_cmp.lower() == "apagar" else link_cmp
                 if link_atraso: updates["boleto_atraso"] = "" if link_atraso.lower() == "apagar" else link_atraso
+                if meses_atraso: updates["meses_atraso"] = "" if meses_atraso.lower() == "apagar" else meses_atraso
                 
                 if updates:
-                    try:
-                        supabase.table("perfis").update(updates).eq("id", opcoes[casa_sel]).execute()
-                        st.success("Documentos atualizados com sucesso!")
-                        st.rerun()
-                    except Exception as e:
-                        # Fallback se a coluna boleto_atraso não foi criada ainda
-                        if "boleto_atraso" in str(e):
-                            supabase.rpc("add_column_if_not_exists", {"table_name": "perfis", "column_name": "boleto_atraso", "column_type": "text"}).execute()
-                            supabase.table("perfis").update(updates).eq("id", opcoes[casa_sel]).execute()
-                            st.success("Documentos atualizados com sucesso!")
-                            st.rerun()
+                    supabase.table("perfis").update(updates).eq("id", opcoes[casa_sel]).execute()
+                    st.success("Documentos atualizados com sucesso!")
+                    st.rerun()
                 else:
-                    st.info("Nenhum link preenchido. (Dica: digite 'apagar' na caixa para remover um link existente).")
+                    st.info("Nenhum campo preenchido. (Dica: digite 'apagar' na caixa para remover um dado existente).")
         
         st.subheader("📋 Situação Atual dos Documentos")
         df_view = df_perfis.copy()
         
-        if "boleto_atraso" not in df_view.columns:
-            df_view["boleto_atraso"] = None
+        if "boleto_atraso" not in df_view.columns: df_view["boleto_atraso"] = None
+        if "meses_atraso" not in df_view.columns: df_view["meses_atraso"] = None
             
         df_view["link_boleto"] = df_view["link_boleto"].apply(lambda x: "✅" if pd.notnull(x) and x else "❌")
-        df_view["link_comprovante"] = df_view["link_comprovante"].apply(lambda x: "✅ (Pago)" if pd.notnull(x) and x else "❌")
-        df_view["boleto_atraso"] = df_view["boleto_atraso"].apply(lambda x: "🚨 Sim" if pd.notnull(x) and x else "Limpo")
+        df_view["boleto_atraso"] = df_view.apply(lambda row: f"🚨 {row['meses_atraso']}" if pd.notnull(row['boleto_atraso']) and row['boleto_atraso'] else "Limpo", axis=1)
         
-        df_view = df_view[["bloco_unidade", "nome", "link_boleto", "link_comprovante", "boleto_atraso"]]
-        df_view.columns = ["Casa", "Morador", "Boleto do Mês", "Comprovativo (Pago)", "Em Atraso"]
+        df_view = df_view[["bloco_unidade", "nome", "link_boleto", "boleto_atraso"]]
+        df_view.columns = ["Casa", "Morador", "Boleto do Mês", "Situação de Atraso"]
         st.dataframe(df_view, use_container_width=True, hide_index=True)
 
 # ─────────────────────────────────────────────
