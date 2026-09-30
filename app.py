@@ -159,15 +159,11 @@ def carregar_financas():
 def calcular_kpis(df: pd.DataFrame, casa_logada: str, mes_sel: int, ano_sel: int):
     entradas = df[df["tipo"] == "entrada"]["valor"].sum() if not df.empty else 0
     saidas   = df[df["tipo"] == "saida"]["valor"].sum() if not df.empty else 0
-    reserva  = df[df["categoria"] == "Fundo de Reserva"]["valor"].sum() if not df.empty else 0
-    doacoes  = df[df["categoria"] == "Doações"]["valor"].sum() if not df.empty else 0
     
     df_mes = df[(df["data"].dt.month == mes_sel) & (df["data"].dt.year == ano_sel)] if not df.empty else pd.DataFrame()
-    taxas_mes = df_mes[(df_mes["categoria"] == "Taxa Condominial") & (df_mes["tipo"] == "entrada")] if not df_mes.empty else pd.DataFrame()
     
-    # 🌟 NOVA LÓGICA DE LOTES UNIFICADOS (Calcula cotas baseadas no valor de R$250)
+    taxas_mes = df_mes[(df_mes["categoria"] == "Taxa Condominial") & (df_mes["tipo"] == "entrada")] if not df_mes.empty else pd.DataFrame()
     if not taxas_mes.empty:
-        # Pega no valor pago e divide por 250. Um pagamento de 1000 conta logo como 4 casas pagas!
         cotas_pagas = sum([round(v / 250) for v in taxas_mes["valor"]])
         pagaram = min(int(cotas_pagas), TOTAL_CASAS)
     else:
@@ -180,9 +176,9 @@ def calcular_kpis(df: pd.DataFrame, casa_logada: str, mes_sel: int, ano_sel: int
     usuario_pago = casa_logada in taxas_mes["casa_pagadora"].tolist() if not taxas_mes.empty and "casa_pagadora" in taxas_mes.columns else False
     
     return {
-        "caixa": saldo_global, "entradas": entradas, "saidas": saidas, "reserva": reserva, "doacoes": doacoes,
+        "caixa": saldo_global, "entradas": entradas, "saidas": saidas,
         "pagaram": pagaram, "inadimp": TOTAL_CASAS - pagaram, "pct_inadimp": ((TOTAL_CASAS - pagaram) / TOTAL_CASAS) * 100,
-        "arrec_mes": arrec_mes, "pro_labore": arrec_mes * 0.10, "mes": mes_sel, "ano": ano_sel,
+        "arrec_mes": arrec_mes, "mes": mes_sel, "ano": ano_sel,
         "usuario_pago": usuario_pago, "mes_iniciado": mes_iniciado
     }
 
@@ -229,7 +225,7 @@ if escolha == "📊 Dashboard":
                 if not kpi["mes_iniciado"]:
                     st.info(f"⏳ O balanço para o mês de **{periodo_selecionado}** ainda não foi fechado ou iniciado pelo síndico.")
                 elif not kpi["usuario_pago"]:
-                    st.error(f"⚠️️ A taxa de {periodo_selecionado} da **{perfil['bloco_unidade']}** está em aberto.")
+                    st.error(f"⚠️ A taxa de {periodo_selecionado} da **{perfil['bloco_unidade']}** está em aberto.")
                     if perfil.get("link_boleto"):
                         st.markdown(f'<a href="{perfil["link_boleto"]}" target="_blank"><button style="background:#EF4444;color:white;border:none;padding:10px 20px;border-radius:8px;font-weight:bold;width:100%;cursor:pointer;">📥 Descarregar Boleto</button></a>', unsafe_allow_html=True)
                 else:
@@ -243,18 +239,16 @@ if escolha == "📊 Dashboard":
             st.markdown("---")
 
         section_header("💰", "Resumo do Caixa (Histórico Completo)")
-        c1, c2, c3, c4 = st.columns(4)
+        c1, c2, c3 = st.columns(3)
         c1.markdown(metric_card("Saldo Global", fmt_brl(kpi["caixa"]), "Total em conta", "green"), unsafe_allow_html=True)
         c2.markdown(metric_card("Entradas G.", fmt_brl(kpi["entradas"]), "Acumulado", "blue"), unsafe_allow_html=True)
         c3.markdown(metric_card("Saídas G.", fmt_brl(kpi["saidas"]), "Acumulado", "red"), unsafe_allow_html=True)
-        c4.markdown(metric_card("Reserva", fmt_brl(kpi["reserva"]), "Fundos", "purple"), unsafe_allow_html=True)
 
         section_header("📉", f"Situação do Mês ({periodo_selecionado})")
-        m1, m2, m3, m4 = st.columns(4)
+        m1, m2, m3 = st.columns(3)
         m1.markdown(metric_card("Adimplentes", f"{kpi['pagaram']}/{TOTAL_CASAS}", "", "green"), unsafe_allow_html=True)
         m2.markdown(metric_card("Inadimplentes", f"{kpi['inadimp']} casas", f"{kpi['pct_inadimp']:.1f}%", "red"), unsafe_allow_html=True)
         m3.markdown(metric_card("Arrecadado", fmt_brl(kpi["arrec_mes"]), "Neste mês", "blue"), unsafe_allow_html=True)
-        m4.markdown(metric_card("Pró-Labore (10%)", fmt_brl(kpi["pro_labore"]), "Ref. Arrecadação", "purple"), unsafe_allow_html=True)
 
         section_header("📋", f"Movimentações Detalhadas ({periodo_selecionado})")
         df_exib = df[(df["data"].dt.month == mes_sel) & (df["data"].dt.year == ano_sel)][["data", "descricao", "categoria", "tipo", "valor"]].copy()
@@ -371,7 +365,7 @@ elif escolha == "➕ Lançar Movimentação":
             val_f  = col_f1.number_input("Valor (R$)", min_value=0.01)
             data_f = col_f1.date_input("Data")
             tipo_f = col_f2.selectbox("Tipo", ["entrada", "saida"])
-            cat_f  = col_f2.selectbox("Categoria", ["Taxa Condominial", "Ajuste de Saldo (Manual)", "Manutenção", "Água/Luz", "Fundo de Reserva", "Pró-Labore Síndico", "Doações", "Outros"])
+            cat_f  = col_f2.selectbox("Categoria", ["Taxa Condominial", "Ajuste de Saldo (Manual)", "Manutenção", "Água/Luz", "Outros"])
             casa_f = col_f2.selectbox("Casa pagadora (Se Taxa Condominial)", ["Não se aplica"] + [f"Casa {i}" for i in range(1, TOTAL_CASAS + 1)])
             
             if st.form_submit_button("✅ Guardar"):
