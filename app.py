@@ -38,6 +38,8 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 .metric-card.green  { border-left-color: #10B981; }
 .metric-card.blue   { border-left-color: #3B82F6; }
 .metric-card.red    { border-left-color: #EF4444; }
+.metric-card.amber  { border-left-color: #F59E0B; }
+.metric-card.purple { border-left-color: #8B5CF6; }
 .metric-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: #94A3B8; margin-bottom: 8px; }
 .metric-value { font-size: 28px; font-weight: 700; color: #0F1B2D; line-height: 1; margin-bottom: 4px; }
 .metric-sub { font-size: 12px; color: #64748B; font-weight: 400; }
@@ -223,24 +225,39 @@ if escolha == "📊 Dashboard":
         kpi = calcular_kpis(df, perfil["bloco_unidade"], mes_sel, ano_sel)
 
         if funcao == "condomino":
-            # ALERTA DE BOLETO EM ATRASO (Amplo e sem limite de meses)
+            # ALERTA DE BOLETO EM ATRASO (Com Geração Automática de Múltiplos Botões)
             if perfil.get("boleto_atraso"):
                 meses_atrasados = perfil.get("meses_atraso") or "meses anteriores"
+                
+                # Extrai os links separando por quebra de linha ou espaço
+                raw_links = perfil["boleto_atraso"].replace(',', ' ').replace('\n', ' ').split(' ')
+                links = [l.strip() for l in raw_links if l.strip().startswith('http')]
+                
+                botoes_html = ""
+                if len(links) > 0:
+                    for i, link in enumerate(links):
+                        label = f"Baixar Boleto {i+1}" if len(links) > 1 else "Baixar Boleto Atualizado"
+                        botoes_html += f'<a href="{link}" target="_blank"><button style="background:#EF4444;color:white;border:none;padding:12px 24px;border-radius:8px;font-weight:bold;cursor:pointer;margin-right:10px;margin-bottom:10px;">{label}</button></a>'
+                else:
+                    botoes_html = f'<a href="{perfil["boleto_atraso"]}" target="_blank"><button style="background:#EF4444;color:white;border:none;padding:12px 24px;border-radius:8px;font-weight:bold;cursor:pointer;">Baixar Boleto em Atraso</button></a>'
+
                 st.markdown(f'<div style="background:#FEF2F2; border: 1px solid #EF4444; border-radius: 8px; padding: 24px; margin-bottom: 24px;">'
                             f'<h4 style="color:#B91C1C; margin-top:0;">🚨 ATENÇÃO: Pendências Financeiras</h4>'
                             f'<p style="color:#991B1B; margin-bottom:15px;">Identificámos pendências referentes a: <b>{meses_atrasados}</b>. Por favor, regularize a situação para evitarmos a suspensão de serviços.</p>'
-                            f'<a href="{perfil["boleto_atraso"]}" target="_blank"><button style="background:#EF4444;color:white;border:none;padding:12px 24px;border-radius:8px;font-weight:bold;cursor:pointer;">Baixar Boleto Atualizado</button></a>'
+                            f'<div>{botoes_html}</div>'
                             f'</div>', unsafe_allow_html=True)
 
             st.markdown(f"### 📌 Situação da {perfil['bloco_unidade']} ({periodo_selecionado})")
             
-            # Removido o bloco do comprovativo. Agora ocupa toda a largura!
             if not kpi["mes_iniciado"]:
                 st.info(f"⏳ A faturação deste mês ainda não foi processada.")
             elif not kpi["usuario_pago"]:
-                st.error(f"⚠️ A taxa deste mês está em aberto.")
-                if perfil.get("link_boleto"):
-                    st.markdown(f'<a href="{perfil["link_boleto"]}" target="_blank"><button style="background:#3B82F6;color:white;border:none;padding:10px 20px;border-radius:8px;font-weight:bold;cursor:pointer;">📥 Descarregar Boleto do Mês</button></a>', unsafe_allow_html=True)
+                col_c1, col_c2 = st.columns([2, 1])
+                with col_c1:
+                    st.error(f"⚠️ A taxa deste mês está em aberto.")
+                with col_c2:
+                    if perfil.get("link_boleto"):
+                        st.markdown(f'<a href="{perfil["link_boleto"]}" target="_blank"><button style="background:#3B82F6;color:white;border:none;padding:10px 20px;border-radius:8px;font-weight:bold;width:100%;cursor:pointer;">📥 Descarregar Boleto do Mês</button></a>', unsafe_allow_html=True)
             else:
                 st.success(f"✅ O pagamento deste mês encontra-se regularizado no sistema.")
             st.markdown("---")
@@ -319,6 +336,24 @@ elif escolha == "📑 Relatórios Oficiais":
         </div>
         """, unsafe_allow_html=True)
 
+    with st.expander("📄 Relatório Financeiro - Julho/2026", expanded=False):
+        st.markdown(r"""
+        <div class="relatorio-box">
+        <h4>Assunto: Relatório Financeiro Mensal</h4>
+        <p>Para garantirmos a transparência total da nossa gestão e mantermos todos informados sobre a saúde financeira do Residencial Vale das Flores, envio o detalhamento das movimentações da nossa conta bancária referente ao mês de Julho.</p>
+        <p><b>Saldo Final de Junho:</b> R\$ 2.110,47</p>
+        <p><b>JULHO/2026</b></p>
+        <ul>
+            <li><b>Entradas (Arrecadação de Taxas):</b> Recebimentos das cotas regulares e do lote unificado.</li>
+            <li><b>Saídas (Contas de Consumo):</b> R\$ 270,41 (Equatorial Energia).</li>
+            <li><b>Saídas (Prestadores de Serviço):</b> R\$ 5.180,00 (Jean Pierre: R\$ 3.150,00 | Fernando Coelho: R\$ 1.300,00 - eletricista / bomba | Luiz Mendes: R\$ 300,00 | Manoel Renato: R\$ 250,00 | Geraldo da Conceição: R\$ 180,00).</li>
+            <li><b>Saídas (Materiais e Insumos):</b> R\$ 1.999,99 (FV Material de Construção, RG Sousa). Destinado à manutenção da bomba de água/poço.</li>
+            <li><i>Nota da Gestão:</i> Excepcionalmente neste mês de Julho, não houve a retirada da remuneração do síndico em prol do caixa do condomínio.</li>
+        </ul>
+        <p><b>Saldo Final de Julho:</b> R\$ 692,97</p>
+        </div>
+        """, unsafe_allow_html=True)
+
 # ─────────────────────────────────────────────
 #  TELA: LANÇAR MOVIMENTAÇÃO (COM IMPORTAÇÃO)
 # ─────────────────────────────────────────────
@@ -390,8 +425,10 @@ elif escolha == "📄 Gestão de Boletos":
             
             st.markdown("##### 🚨 Situação de Atraso (Opcional)")
             st.info("Preencha estes campos apenas se o morador tiver dívidas antigas. Isto criará um alerta vermelho no painel dele.")
-            meses_atraso = st.text_input("Meses em Atraso (Texto que aparecerá no alerta)", placeholder="Ex: Julho, Agosto, Setembro e Outubro")
-            link_atraso = st.text_input("Link do Boleto de Atraso", placeholder="Cole o link do boleto com o valor atualizado...")
+            
+            col_b1, col_b2 = st.columns([1, 2])
+            meses_atraso = col_b1.text_input("Meses em Atraso", placeholder="Ex: Julho e Agosto")
+            link_atraso = col_b2.text_area("Links dos Boletos em Atraso (Cole um por linha ou separe por espaço)", height=68, placeholder="https://...\nhttps://...")
             
             if st.form_submit_button("💾 Guardar / Atualizar Morador"):
                 updates = {}
